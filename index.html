@@ -215,6 +215,7 @@ input{font:inherit}
 .actor-meta{font-size:13px;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
 .actor-meta b{color:var(--ivory)}
 .btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.btns.three{grid-template-columns:1fr 1.3fr 1fr}
 .btns.one{grid-template-columns:1fr}
 .dock-note{margin:0;font-size:12.5px;color:var(--muted)}
 
@@ -237,6 +238,8 @@ input{font:inherit}
 input[type=range]{width:100%;height:36px;accent-color:var(--brass);background:transparent}
 .presets{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
 .presets button{flex:1 1 auto;height:40px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:rgba(0,0,0,.18);font-size:14px;font-weight:600}
+.presets button[data-p="all"]{border-color:var(--red);color:var(--ivory);background:rgba(216,73,59,.35);font-weight:800}
+.presets button:disabled{opacity:.3}
 .sd-body{display:grid;gap:12px;margin-top:14px}
 .potblock{border:1px solid var(--line);border-radius:14px;padding:12px}
 .pothead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:10px}
@@ -258,6 +261,7 @@ input[type=range]{width:100%;height:36px;accent-color:var(--brass);background:tr
 .switch[aria-checked=true] span{transform:translateX(22px);background:var(--brass)}
 .btn-sec{margin-top:10px;height:44px;padding:0 16px;border-radius:12px;border:1px solid var(--brass);background:transparent;color:var(--brass);font-weight:700}
 .btn-sec:disabled{opacity:.35}
+.btn-sec.armed{background:var(--brass);color:var(--ink)}
 .btn-danger{width:100%;height:48px;border-radius:12px;border:1px solid rgba(255,139,125,.5);background:transparent;color:var(--bad);font-weight:700}
 .btn-danger.armed{background:var(--red);color:var(--ivory);border-color:var(--red)}
 .add-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end}
@@ -364,9 +368,15 @@ input[type=range]{width:100%;height:36px;accent-color:var(--brass);background:tr
       <label><span class="lbl">Small blind</span><input class="txt" id="c-sb" inputmode="numeric" value="5"></label>
       <label><span class="lbl">Big blind</span><input class="txt" id="c-bb" inputmode="numeric" value="10"></label>
     </div>
+    <div class="grid3">
+      <label><span class="lbl">7-2 bounty</span><input class="txt" id="c-bounty" inputmode="numeric" value="30"></label>
+      <p class="hint" style="grid-column:span 2;align-self:end;margin:0 0 4px">Win a hand holding 7-2 and every other player dealt in pays you this. Set 0 to turn it off.</p>
+    </div>
     <p class="hint">Players can top up between hands, but only back to the starting stack.</p>
     <p class="err" id="c-err" role="alert"></p>
     <button class="cta" id="c-open">Open table</button>
+    <div class="resume" style="margin-top:4px"><div><b>Moving a game here?</b><span>Load a table file exported from another table. Everyone keeps their chips.</span></div><button class="btn b-fold" id="c-import" style="height:42px;padding:0 16px;flex:none">Import file</button></div>
+    <input type="file" id="c-file" accept=".json,application/json" hidden>
   </div>
 </section>
 
@@ -3015,12 +3025,19 @@ function boardHTML(S, last){
 }
 
 /* ================= sheets ================= */
-function openSheet(id){ const el = $(id); el.hidden = false; requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('open'))); }
+/* Each open or close gets a token, so a close that lands mid-animation can't be undone by the open finishing late. */
+let sheetTok = 0;
+function openSheet(id){
+  const el = $(id), t = el.__tok = ++sheetTok;
+  el.hidden = false;
+  requestAnimationFrame(() => requestAnimationFrame(() => { if (el.__tok === t) el.classList.add('open'); }));
+}
 function closeSheets(only){
   $$('.sheet').forEach(el => {
     if (el.hidden || (only && '#' + el.id !== only)) return;
+    const t = el.__tok = ++sheetTok;
     el.classList.remove('open');
-    setTimeout(() => { if (!el.classList.contains('open')) el.hidden = true; }, 230);
+    setTimeout(() => { if (el.__tok === t) el.hidden = true; }, 230);
   });
 }
 $$('.sheet').forEach(el => el.addEventListener('click', e => { if (e.target === el || e.target.closest('[data-close]')) closeSheets(); }));
@@ -3072,6 +3089,7 @@ function startHand(){
   S.pots = null; S.runout = false;
   if (liveN < 2){ S.stage = S.hand ? 'over' : 'lobby'; S.toAct = -1; return null; }
   S.hand++; S.street = 0; S.stage = 'betting'; S.result = ''; S.resultSub = '';
+  S.lastDealt = S.players.filter(p => !p.out).map(p => p.tag); S.lastWin = [];
   S.handSB = S.sb; S.handBB = S.bb;
   S.dealer = nextSeat(S.dealer, p => !p.out);
   if (liveN === 2){ S.sbIdx = S.dealer; S.bbIdx = nextSeat(S.dealer, p => !p.out); }
@@ -3182,7 +3200,7 @@ function winUncontested(w){
   p.stack += total;
   recordHand(total, [[p.name, total]]);
   S.players.forEach(q => { q.last = q === p ? `Won ${fmt(total)}` : ''; });
-  S.result = `${p.name} takes ${fmt(total)}`; S.resultSub = 'Everyone else folded';
+  S.result = `${p.name} takes ${fmt(total)}`; S.resultSub = 'Everyone else folded'; S.lastWin = [p.tag];
   log(S.result);
   const tag = p.tag;
   finishHand();
@@ -3200,7 +3218,7 @@ function engineAward(){
   const ws = Object.keys(gains).map(Number);
   recordHand(S.pots.reduce((a, pt) => a + pt.amount, 0), ws.map(i => [P(i).name, gains[i]]));
   S.result = ws.length ? ws.map(i => `${P(i).name} +${fmt(gains[i])}`).join(' · ') : 'Pot paid out';
-  S.resultSub = ws.length > 1 ? 'Pot split' : 'Showdown';
+  S.resultSub = ws.length > 1 ? 'Pot split' : 'Showdown'; S.lastWin = ws.map(i => P(i).tag);
   log(S.result);
   const tags = ws.map(i => P(i).tag);
   finishHand();
@@ -3226,6 +3244,7 @@ function joinUrl(){
 function hostCreate(){
   const err = $('#c-err');
   const stack = toInt($('#c-stack').value, 0), sb = toInt($('#c-sb').value, 0), bb = toInt($('#c-bb').value, 0), max = +$('#c-max').textContent;
+  const bountyRaw = String($('#c-bounty').value).trim(), bounty = bountyRaw === '' ? 0 : (parseInt(bountyRaw.replace(/[^\d]/g, ''), 10) || 0);
   if (!stack || !sb || !bb){ err.textContent = 'Enter the stack and both blinds as whole numbers.'; return; }
   if (bb < sb){ err.textContent = 'The big blind must be at least the small blind.'; return; }
   if (stack < bb * 2){ err.textContent = 'Give everyone at least two big blinds to start.'; return; }
@@ -3235,17 +3254,19 @@ function hostCreate(){
   const code = makeId(6);
   S = { table: { code, label: `Table ${count}`, max, created: Date.now() }, players: [], gone: [], startStack: stack, sb, bb, handSB: sb, handBB: bb,
         dealer: -1, sbIdx: -1, bbIdx: -1, street: 0, currentBet: 0, minRaise: bb, toAct: -1, hand: 0, stage: 'lobby', result: '', resultSub: '',
-        pots: null, runout: false, seq: 0, fx: null, log: [], closed: false };
+        pots: null, runout: false, seq: 0, fx: null, log: [], closed: false, bounty, lastDealt: [], lastWin: [], bountyHand: 0 };
   Object.assign(H, { code, pubN: 0, fxN: 0, hist: [], online: {}, broker: 0, last: { v: 0 } });
   log(`${S.table.label} opened`);
   hostSave();
   hostStart(0);
 }
 function hostResume(code){
+  AD.paused = true; clearInterval(AD.timer); AD.timer = 0; AD.at = 0;
   const rec = store.json(hostKey(code)); if (!rec || !rec.S) return false;
   S = rec.S;
   Object.assign(H, { code, pubN: rec.pubN || 0, fxN: rec.fxN || 0, hist: [], online: {}, broker: rec.broker || 0, last: { v: 99 } });
   hostStart(H.broker, true);
+  if (S.stage === 'done' && !S.closed){ AD.paused = false; autoDeal(true); }
   return true;
 }
 function hostStart(brokerIdx, resumed){
@@ -3326,7 +3347,7 @@ async function hostCmd(m){
     case 'leave': if (i >= 0) hostLeave(i, tag); break;
   }
 }
-function refreshOver(){ if (S.stage === 'over' && funded() >= 2) S.stage = 'done'; }
+function refreshOver(){ if (S.stage === 'over' && funded() >= 2){ S.stage = 'done'; AD.paused = false; setTimeout(() => autoDeal(true), 0); } }
 function hostJoin(pid, tag, raw){
   const name = cleanName(raw);
   if (!name) return hostReply(tag, { type: 'error', msg: 'Enter your name.' });
@@ -3384,11 +3405,49 @@ function hostAct(i, kind, to, opts = {}){
   if (opts.rid) P(i).rid = opts.rid;
   const r = engineAct(i, kind, to);
   commit({ kind: r.fx, tag, name, moved: r.moved, after: r.after }, { foldRect });
+  if (S.stage === 'done'){ AD.paused = false; autoDeal(true); }
+}
+/* 7-2 bounty: the winner showed 7-2, so every other player dealt into that hand pays the bounty (or what they have left). */
+function hostBounty(tag){
+  if (!S || S.stage !== 'done' || !S.bounty || S.bountyHand === S.hand || !(S.lastWin || []).includes(tag)) return;
+  const w = S.players.find(p => p.tag === tag); if (!w) return;
+  snap();
+  let total = 0; const payers = [];
+  S.players.forEach(p => {
+    if (p === w || !(S.lastDealt || []).includes(p.tag)) return;
+    const amt = Math.min(S.bounty, p.stack);
+    if (amt > 0){ p.stack -= amt; total += amt; payers.push(p.tag); }
+  });
+  w.stack += total; S.bountyHand = S.hand;
+  w.last = (/^Won/.test(w.last || '') ? w.last + ' · ' : '') + `7-2 +${fmt(total)}`;
+  S.result = (S.result ? S.result + ' · ' : '') + `7-2 bounty ${w.name} +${fmt(total)}`;
+  const h = S.hands && S.hands[S.hands.length - 1]; if (h && h.n === S.hand) h.bounty = [w.name, total];
+  log(`${w.name} shows 7-2 and collects ${fmt(total)}`);
+  if (funded() < 2) S.stage = 'over';
+  commit({ kind: 'bounty', tag, name: w.name, amount: total, payers }, { seq: false });
+  autoDeal(true);
+}
+/* After a hand is paid out the next one deals itself. Opening a sheet holds the deal; Pause stops it. */
+const DEAL_MS = (parseFloat(QS.get('deal')) || 6) * 1000;
+const AD = { at: 0, timer: 0, paused: false };
+function autoDeal(restart){
+  clearInterval(AD.timer); AD.timer = 0;
+  if (VIEW || !S || S.stage !== 'done' || S.closed || AD.paused) { AD.at = 0; if (S && !VIEW) hostRenderDock(); return; }
+  if (restart || !AD.at) AD.at = Date.now() + DEAL_MS;
+  hostRenderDock();
+  AD.timer = setInterval(() => {
+    if (!S || S.stage !== 'done' || S.closed || AD.paused){ clearInterval(AD.timer); AD.timer = 0; AD.at = 0; return; }
+    if ($$('.sheet').some(sh => !sh.hidden)) AD.at = Math.max(AD.at, Date.now() + 1500);
+    const left = Math.ceil((AD.at - Date.now()) / 1000);
+    const c = $('#h-count'); if (c) c.textContent = left > 0 ? `Next hand in ${left}s` : 'Dealing…';
+    if (Date.now() >= AD.at){ clearInterval(AD.timer); AD.timer = 0; AD.at = 0; hostDeal(); }
+  }, 250);
 }
 function hostDeal(){
   if (!S || !(S.stage === 'done' || S.stage === 'over' || S.stage === 'lobby')) return;
   if (S.players.filter(p => p.stack > 0 || p.topup).length < 2){ toast('Need at least two players with chips.'); return; }
   snap();
+  AD.paused = false; clearInterval(AD.timer); AD.timer = 0; AD.at = 0;
   const after = startHand();
   commit({ kind: 'deal', after });
 }
@@ -3398,6 +3457,7 @@ function hostAward(){
   const r = engineAward();
   closeSheets();
   commit({ kind: 'win', tags: r.tags });
+  if (S.stage === 'done'){ AD.paused = false; autoDeal(true); }
 }
 function hostUndo(){
   if (!H.hist.length) return;
@@ -3411,6 +3471,7 @@ function hostUndo(){
   });
   prev.seq = Math.max(prev.seq, cur.seq) + 1;
   S = prev; H.last.v = 99;
+  AD.paused = true; clearInterval(AD.timer); AD.timer = 0; AD.at = 0;
   closeSheets();
   commit({ kind: 'undo' }, { seq: false });
   toast('Undid last action');
@@ -3460,7 +3521,7 @@ function hostRender(){
   if (!S) return;
   $('#h-label').textContent = S.table.label;
   $('#h-code').textContent = H.code;
-  $('#h-meta').textContent = `${S.hand ? 'Hand ' + S.hand + ' · ' : ''}Blinds ${fmt(S.sb)}/${fmt(S.bb)} · ${S.players.length}/${S.table.max} seats`;
+  $('#h-meta').textContent = `${S.hand ? 'Hand ' + S.hand + ' · ' : ''}Blinds ${fmt(S.sb)}/${fmt(S.bb)}${S.bounty ? ' · 7-2 bounty ' + fmt(S.bounty) : ''} · ${S.players.length}/${S.table.max} seats`;
   $('#h-undo').disabled = !H.hist.length;
   $('#h-undo').hidden = VIEW; $('#h-menu').hidden = VIEW; $('#h-leave').hidden = !VIEW; $('#h-viewtag').hidden = !VIEW;
   const lobby = S.stage === 'lobby';
@@ -3470,6 +3531,7 @@ function hostRender(){
     $('#h-url').textContent = joinUrl();
     if ($('#h-qr').dataset.code !== H.code){ $('#h-qr').innerHTML = qrSvg(joinUrl()); $('#h-qr').dataset.code = H.code; }
     $('#h-seatcount').textContent = `Players ${S.players.length}/${S.table.max}`;
+    $('#h-url').textContent = (S.table.movedFrom ? `Moved from ${S.table.movedFrom}. Everyone rejoins here with the same name to get their chips back. ` : '') + joinUrl();
     $('#h-plist').innerHTML = S.players.length ? S.players.map(p => `<span><i class="dot ${isOn(p) ? 'on' : ''}"></i>${esc(p.name)}</span>`).join('') : '<span class="empty">Nobody yet. Scan the code with a phone camera.</span>';
   } else {
     $('#h-street').textContent = S.closed ? 'Table closed' : S.stage === 'betting' ? STREETS[S.street] : S.stage === 'showdown' ? 'Showdown' : S.stage === 'over' ? 'Game paused' : 'Hand complete';
@@ -3515,7 +3577,7 @@ function hostRenderDock(){
   const d = $('#h-dock'); let msg = '', btns = '', cls = '';
   if (S.stage === 'lobby'){
     msg = `<b>Waiting for players</b><span>${S.players.length < 2 ? 'At least two players need to join before the first deal.' : `${S.players.length} seated. Deal when everyone is in.`}</span>`;
-    btns = `<button class="btn b-raise" data-h="deal"${S.players.length < 2 ? ' disabled' : ''}>Deal first hand</button>`;
+    btns = `<button class="btn b-raise" data-h="deal"${S.players.length < 2 ? ' disabled' : ''}>${S.hand ? `Deal hand ${S.hand + 1}` : 'Deal first hand'}</button>`;
   } else if (S.stage === 'betting'){
     const p = P(S.toAct), toCall = Math.max(0, S.currentBet - p.bet);
     msg = `<b>${esc(p.name)} to act</b><span>${toCall ? `${fmt(Math.min(toCall, p.stack))} to call` : 'Can check'} · ${isOn(p) ? 'acting on their phone' : VIEW ? 'phone offline' : 'phone offline, you can act for them'}</span>`;
@@ -3530,12 +3592,16 @@ function hostRenderDock(){
   } else {
     cls = ' result';
     const n = nextSeat(S.dealer, p => p.stack > 0);
-    msg = `<b>${esc(S.result || 'Ready')}</b><span>${S.resultSub ? esc(S.resultSub) + ' · ' : ''}Button moves to ${n >= 0 ? esc(P(n).name) : 'the next player'}</span>`;
-    btns = `<button class="btn b-raise" data-h="deal">Deal hand ${S.hand + 1}</button>`;
+    const counting = !VIEW && AD.at && !AD.paused;
+    msg = `<b>${esc(S.result || 'Ready')}</b><span>${S.resultSub ? esc(S.resultSub) + ' · ' : ''}Button moves to ${n >= 0 ? esc(P(n).name) : 'the next player'}${counting ? ` · <b id="h-count" style="display:inline;font:inherit;color:var(--brass)">Next hand in ${Math.max(1, Math.ceil((AD.at - Date.now()) / 1000))}s</b>` : ''}</span>`;
+    const bountyBtns = S.bounty && S.bountyHand !== S.hand ? (S.lastWin || []).map(t => S.players.find(p => p.tag === t)).filter(Boolean)
+      .map(p => `<button class="btn b-allin" data-h="bounty" data-tag="${p.tag}" style="font-size:17px">7-2 · ${esc(p.name)}</button>`).join('') : '';
+    btns = bountyBtns + (counting ? `<button class="btn b-fold" data-h="pause">Pause</button><button class="btn b-raise" data-h="deal">Deal now</button>`
+                                  : `<button class="btn b-raise" data-h="deal">Deal hand ${S.hand + 1}</button>`);
   }
   if (S.closed){ cls = ''; msg = `<b>Table closed</b><span>${esc(S.table.label)} has ended. Thanks for playing.</span>`; btns = VIEW ? `<button class="btn b-raise" data-h="home">Back to start</button>` : ''; }
   else if (VIEW) btns = '';
-  else if (S.stage === 'lobby' || S.stage === 'done' || S.stage === 'over') btns = `<button class="btn b-fold" data-h="close">Close table</button>` + btns;
+  else if (S.stage === 'lobby' || S.stage === 'over' || (S.stage === 'done' && !(AD.at && !AD.paused))) btns = `<button class="btn b-fold" data-h="close">Close table</button>` + btns;
   d.innerHTML = `<div class="msg${cls}">${msg}</div><div class="btns">${btns}</div>`;
 }
 function hostFx(fx, opts){
@@ -3550,6 +3616,7 @@ function hostFx(fx, opts){
     case 'deal': Snd.shuffle(); break;
     case 'join': Snd.join(); break;
     case 'topup': Snd.chips(5); flyChips(pot, el, 5); break;
+    case 'bounty': stamp(el, '7-2!', 'raise'); Snd.win(); (fx.payers || []).forEach((t, k) => setTimeout(() => flyChips(seat(t), el, 4), k * 120)); break;
     case 'win': setTimeout(() => { (fx.tags || []).forEach((t, k) => setTimeout(() => flyChips(pot, seat(t), 9), k * 200)); Snd.win(); }, 380); break;
   }
   const after = fx.after;
@@ -3570,6 +3637,8 @@ $('#h-dock').addEventListener('click', e => {
     return hostClose();
   }
   if (a === 'deal') hostDeal();
+  else if (a === 'pause'){ AD.paused = true; autoDeal(); hostRenderDock(); }
+  else if (a === 'bounty') hostBounty(b.dataset.tag);
   else if (a === 'showdown') openShowdown();
   else if (a === 'actfor') openSeat(+b.dataset.i);
 });
@@ -3651,11 +3720,18 @@ function renderHostMenu(){
       <div class="grid2"><label><span class="lbl">Small blind</span><input class="txt" id="m-sb" inputmode="numeric" value="${S.sb}"></label>
       <label><span class="lbl">Big blind</span><input class="txt" id="m-bb" inputmode="numeric" value="${S.bb}"></label></div>
       <button class="btn-sec" data-m="blinds">Save blinds</button><p class="hint" id="m-msg">New blinds start with the next hand.</p></div>
+    <div class="m-sec"><h3>7-2 bounty</h3>
+      <div class="add-row"><input class="txt" id="m-bounty" inputmode="numeric" value="${S.bounty || 0}"><button class="btn-sec" data-m="bounty">Save</button></div>
+      <p class="hint" id="m-bmsg">After a hand, tap the 7-2 button for a winner who shows 7-2. Set 0 to turn it off.</p></div>
     ${S.players.length < S.table.max ? `<div class="m-sec"><h3>Add a player without a phone</h3>
       <div class="add-row"><input class="txt" id="m-add" maxlength="14" placeholder="Name" autocomplete="off"><button class="btn-sec" data-m="add">Add seat</button></div>
       <p class="hint">You act for them by tapping their seat. If they later join from a phone with the same name, the seat moves to their phone.</p></div>` : ''}
     <div class="m-sec"><h3>Settle up</h3><p class="hint" style="margin:0 0 10px">Starting stack ${fmt(S.startStack)}. Top-ups only refill to that amount.${between ? '' : ' Figures settle when this hand ends.'}</p>
       <div class="tbl-wrap"><table class="settle"><thead><tr><th>Player</th><th class="num">Bought</th><th class="num">Chips</th><th class="num">Net</th></tr></thead><tbody>${rows || '<tr><td colspan="4">Nobody yet</td></tr>'}</tbody></table></div></div>
+    <div class="m-sec"><h3>Move to another table</h3>
+      <p class="hint" style="margin:0 0 8px">Saves every seat, stack, buy-in and hand so far to a file. On the new tablet, choose Create a table → Import file. Players rejoin there with the same name and keep their chips.${between ? '' : ' Available once this hand is paid out.'}</p>
+      <div style="display:grid;gap:8px"><button class="btn-sec" data-m="export"${between ? '' : ' disabled'} style="margin:0">Download table file</button>
+      <button class="btn-sec" data-m="move"${between ? '' : ' disabled'} style="margin:0">Download file and close this table</button></div></div>
     <div class="m-sec"><button class="btn-danger" data-m="close">Close ${esc(S.table.label)}</button><p class="hint">Phones see that the table closed. Your next table gets a new code.</p></div>`;
 }
 $('#menu-body').addEventListener('click', e => {
@@ -3672,12 +3748,22 @@ $('#menu-body').addEventListener('click', e => {
     if (sb === S.sb && bb === S.bb){ msg.textContent = 'Those are already the blinds.'; return; }
     snap(); S.sb = sb; S.bb = bb; log(`Blinds go to ${fmt(sb)}/${fmt(bb)} next hand`); commit(null, { seq: false });
     msg.textContent = `Saved. ${fmt(sb)}/${fmt(bb)} starts next hand.`;
+  } else if (m === 'bounty'){
+    const raw = String($('#m-bounty').value).trim(), v = raw === '' ? 0 : (parseInt(raw.replace(/[^\d]/g, ''), 10) || 0), msg = $('#m-bmsg');
+    if (v === (S.bounty || 0)){ msg.textContent = 'That is already the bounty.'; return; }
+    snap(); S.bounty = v; log(v ? `7-2 bounty set to ${fmt(v)}` : '7-2 bounty turned off'); commit(null, { seq: false });
+    msg.textContent = v ? `Saved. The 7-2 bounty is ${fmt(v)}.` : 'Saved. The 7-2 bounty is off.';
   } else if (m === 'add'){
     const name = cleanName($('#m-add').value);
     if (!name){ toast('Enter a name first.'); return; }
     if (S.players.some(p => p.name.toLowerCase() === name.toLowerCase())){ toast('Someone already has that name.'); return; }
     const pid = 'host-' + makeId(16);
     tagOf(pid).then(tag => { S.players.push(newPlayer(name, pid, tag)); refreshOver(); log(`${name} sat down${S.hand ? ', dealt in next hand' : ''}`); commit({ kind: 'join', tag }, { seq: false }); renderHostMenu(); });
+  } else if (m === 'export'){
+    exportTable(S); toast('Table file saved. Check your Downloads or Files app.');
+  } else if (m === 'move'){
+    if (!b.classList.contains('armed')){ b.classList.add('armed'); b.textContent = 'Tap again to save and close'; return; }
+    exportTable(S); closeSheets(); setTimeout(hostClose, 600);
   } else if (m === 'close'){
     if (!b.classList.contains('armed')){ b.classList.add('armed'); b.textContent = 'Tap again to close the table'; setTimeout(() => { if (b.isConnected){ b.classList.remove('armed'); b.textContent = `Close ${S.table.label}`; } }, 3500); return; }
     closeSheets(); hostClose();
@@ -3688,15 +3774,14 @@ $('#menu-body').addEventListener('click', e => {
 function actionButtons(st, i, scope, disabled){
   const p = st.players[i], toCall = Math.max(0, st.currentBet - p.bet), max = p.bet + p.stack;
   const minTo = st.currentBet === 0 ? st.handBB : st.currentBet + st.minRaise;
-  const raiseOK = !p.locked && max > minTo;
-  const allOK = !(p.locked && max > st.currentBet);
+  // Raise opens the sheet, which also holds All in. It stays available whenever you can put in more than a call.
+  const raiseOK = !p.locked && max > st.currentBet;
   const callAll = toCall > 0 && toCall >= p.stack;
   const dis = disabled ? ' disabled' : '';
-  return `<div class="btns" data-scope="${scope}">
+  return `<div class="btns three" data-scope="${scope}">
     <button class="btn b-fold" data-act="fold"${dis}>Fold</button>
     <button class="btn b-call" data-act="${toCall === 0 ? 'check' : 'call'}"${dis}>${toCall === 0 ? 'Check' : callAll ? 'Call · all in' : 'Call ' + fmt(toCall)}</button>
     <button class="btn b-raise" data-act="raise"${raiseOK && !disabled ? '' : ' disabled'}>${st.currentBet === 0 ? 'Bet' : 'Raise'}</button>
-    <button class="btn b-allin" data-act="allin"${allOK && !disabled ? '' : ' disabled'}>All in</button>
   </div>${p.locked && !disabled ? '<p class="dock-note">A short all-in did not reopen the raising. You can call or fold.</p>' : ''}`;
 }
 let R = null;
@@ -3704,7 +3789,8 @@ function openRaise(st, i, onOk){
   const p = st.players[i], max = p.bet + p.stack;
   const min = Math.min(st.currentBet === 0 ? st.handBB : st.currentBet + st.minRaise, max);
   R = { st, i, min, max, unit: st.handSB || 1, step: st.handBB || 1, val: min, onOk };
-  $('#r-title').textContent = st.currentBet === 0 ? 'Bet' : 'Raise to';
+  $('#r-title').textContent = min >= max ? 'All in' : st.currentBet === 0 ? 'Bet' : 'Raise to';
+  $('#r-presets').querySelectorAll('button').forEach(b => { b.disabled = min >= max && b.dataset.p !== 'all'; });
   $('#r-who').textContent = p.name;
   const sl = $('#r-slider'); sl.min = min; sl.max = max; sl.step = 1;
   setRaise(min, false, true);
@@ -3822,6 +3908,7 @@ function phoneState(m){
   const me = phoneSeat();
   if (me >= 0){
     Pn.seated = true;
+    if (QS.get('t')) try { const u = new URL(location.href); u.searchParams.delete('t'); u.searchParams.delete('b'); history.replaceState(null, '', u.toString()); } catch(e){}
     if (!store.get(phoneKey(Pn.code))){ store.set(phoneKey(Pn.code), JSON.stringify({ pid: Pn.pid, name: Pn.name, b: Pn.broker })); store.set('hgc-phone-last', Pn.code); }
   } else if (Pn.seated && prev && prev.players.some(p => p.tag === Pn.tag)){
     forgetSeat(); toast("You've left the table.");
@@ -3838,6 +3925,7 @@ function phoneState(m){
   phoneRender();
   phoneBanner();
   if (prev && !prev.closed && m.closed) toast('The table was closed.');
+  if (m.closed) forgetSeat();
 }
 const phoneSeat = () => Pn.st ? Pn.st.players.findIndex(p => p.tag === Pn.tag) : -1;
 const ACTS = ['fold', 'check', 'call', 'bet', 'raise', 'allin'];
@@ -3847,6 +3935,7 @@ function phoneFx(fx){
   else if (fx.kind === 'allin') { Snd.allIn(); allInFx(fx.name, $('#p-me')); }
   else if (mineAct || (fx.tag === Pn.tag && fx.kind === 'topup')) playOwn(fx.kind);   // the table acted for you
   else if (fx.kind === 'deal') Snd.shuffle();
+  else if (fx.kind === 'bounty'){ if (fx.tag === Pn.tag) Snd.win(); else if ((fx.payers || []).includes(Pn.tag)){ Snd.chips(3); toast(`${fx.name} showed 7-2. You paid the bounty.`); } }
   else if (fx.kind === 'win' && (fx.tags || []).includes(Pn.tag)) Snd.win();
   if (fx.after && fx.after.kind === 'win' && (fx.after.tags || []).includes(Pn.tag)) setTimeout(() => Snd.win(), 400);
 }
@@ -4019,13 +4108,70 @@ function watchStop(){
   try { const u = new URL(location.href); u.searchParams.delete('w'); history.replaceState(null, '', u.toString()); } catch(e){}
   goHome();
 }
-$('#go-watch').addEventListener('click', () => show('watchform'));
+$('#go-watch').addEventListener('click', () => { $('#w-code').value = ''; $('#w-err').textContent = ''; show('watchform'); });
 $('#w-code').addEventListener('input', e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6); });
 $('#w-code').addEventListener('keydown', e => { if (e.key === 'Enter') $('#w-go').click(); });
 $('#w-go').addEventListener('click', () => {
   const code = $('#w-code').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (code.length !== 6){ $('#w-err').textContent = 'The table code has 6 characters.'; return; }
   $('#w-err').textContent = ''; Snd.init(); watchStart(code, 0);
+});
+
+/* ================= move a table: export to a file, import as a new table ================= */
+function tableFile(st){
+  const t = JSON.parse(JSON.stringify(st));
+  t.players.forEach(p => { delete p.pid; delete p.tag; delete p.rid; });
+  return { app: 'home-game-chips', version: 1, exportedAt: Date.now(), table: t };
+}
+function saveFile(name, text, type){
+  const blob = new Blob([text], { type });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+function exportTable(st){
+  saveFile(`${st.table.label.replace(/\s+/g, '-')}-${st.table.code}.chips.json`, JSON.stringify(tableFile(st), null, 1), 'application/json');
+}
+/* Builds a fresh table (new code, next table number) from an exported or past table. Seats wait offline;
+   each player rejoins with the same name and their seat, stack and buy-ins move to their phone. */
+async function importTable(src){
+  const n = x => { const v = Math.floor(Number(x)); return Number.isFinite(v) && v >= 0 ? v : 0; };
+  if (!src || !Array.isArray(src.players) || !(n(src.startStack) > 0) || !(n(src.bb) > 0) || !(n(src.sb) > 0)) throw new Error('That file is not a Home Game Chips table.');
+  if (src.stage === 'betting' || src.stage === 'showdown') throw new Error('That table was saved in the middle of a hand. Finish the hand and export again.');
+  const players = [];
+  for (const p of src.players){
+    const name = cleanName(p.name);
+    if (!name || players.some(q => q.name.toLowerCase() === name.toLowerCase()) || players.length >= 10) continue;
+    const pid = 'moved-' + makeId(16);
+    players.push({ name, pid, tag: await tagOf(pid), stack: n(p.stack) + n(p.committed), bought: n(p.bought), bet: 0, committed: 0, folded: true, allIn: false, acted: false, locked: false, out: false, last: 'Rejoin with the same name', topup: false, leaving: false });
+  }
+  if (!players.length) throw new Error('That file has no players in it.');
+  const count = (toInt(store.get('hgc-table-count'), 0) || 0) + 1;
+  store.set('hgc-table-count', String(count));
+  const code = makeId(6), from = src.table ? `${src.table.label || 'a table'}${src.table.code ? ' (' + src.table.code + ')' : ''}` : 'another table';
+  const sb = n(src.sb), bb = n(src.bb);
+  S = { table: { code, label: `Table ${count}`, max: Math.min(10, Math.max(players.length, n(src.table && src.table.max) || 10, 2)), created: Date.now(), movedFrom: from },
+        players, gone: Array.isArray(src.gone) ? src.gone.map(g => ({ name: cleanName(g.name), bought: n(g.bought), stack: n(g.stack) })).filter(g => g.name) : [],
+        startStack: n(src.startStack), sb, bb, handSB: sb, handBB: bb,
+        dealer: Number.isInteger(src.dealer) && src.dealer >= -1 && src.dealer < players.length ? src.dealer : -1, sbIdx: -1, bbIdx: -1,
+        street: 0, currentBet: 0, minRaise: bb, toAct: -1, hand: n(src.hand), stage: 'lobby', result: '', resultSub: '',
+        pots: null, runout: false, seq: 0, fx: null, log: [], closed: false, bounty: n(src.bounty), lastDealt: [], lastWin: [], bountyHand: 0,
+        hands: Array.isArray(src.hands) ? src.hands.slice(-1000) : [] };
+  log(`Moved here from ${from}`);
+  Object.assign(H, { code, pubN: 0, fxN: 0, hist: [], online: {}, broker: 0, last: { v: 0 } });
+  AD.paused = true;
+  hostSave();
+  hostStart(0);
+  toast(`${S.table.label} is open. Players rejoin with the same name to get their chips.`);
+}
+$('#c-import').addEventListener('click', () => $('#c-file').click());
+$('#c-file').addEventListener('change', async e => {
+  const f = e.target.files && e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    Snd.init();
+    await importTable(data && data.table ? data.table : data);
+  } catch(err){ $('#c-err').textContent = err && err.message && !/JSON/.test(err.message) ? err.message : 'That file could not be read. Pick a .chips.json file exported from a table.'; }
 });
 
 /* ================= past games (stored on the table device) ================= */
@@ -4074,8 +4220,10 @@ function renderHistDetail(code){
     sm.rows.map(x => `<tr class="${x.left ? 'gone' : ''}"><td class="nm">${esc(x.name)}${x.left ? ' (left)' : ''}</td><td class="num">${fmt(x.bought)}</td><td class="num">${fmt(x.chips)}</td><td class="num ${x.net > 0 ? 'pos' : x.net < 0 ? 'neg' : ''}">${x.net > 0 ? '+' : x.net < 0 ? '−' : ''}${fmt(Math.abs(x.net))}</td><td class="num">${x.won}</td></tr>`).join('') + '</tbody>';
   const hs = (st.hands || []).slice(-15).reverse();
   $('#hd-hands').innerHTML = hs.length ? `<thead><tr><th>Hand</th><th>Winner</th><th class="num">Pot</th></tr></thead><tbody>` +
-    hs.map(h => `<tr><td>${h.n}</td><td class="nm">${esc(h.win.map(w => w[0]).join(' & '))}</td><td class="num">${fmt(h.pot)}</td></tr>`).join('') + '</tbody>' : '<tbody><tr><td>No hands finished yet.</td></tr></tbody>';
+    hs.map(h => `<tr><td>${h.n}</td><td class="nm">${esc(h.win.map(w => w[0]).join(' & '))}${h.bounty ? ` · 7-2 bounty +${fmt(h.bounty[1])}` : ''}</td><td class="num">${fmt(h.pot)}</td></tr>`).join('') + '</tbody>' : '<tbody><tr><td>No hands finished yet.</td></tr></tbody>';
   $('#hd-actions').innerHTML = `<button class="cta alt" data-hd="csv">Download results (spreadsheet)</button>
+    <button class="btn-sec" data-hd="export" style="margin:0;height:48px">Download table file</button>
+    ${st.closed ? `<button class="btn-sec" data-hd="continue" style="margin:0;height:48px">Continue in a new table</button>` : ''}
     ${st.closed ? '' : `<button class="cta" data-hd="resume">Resume this table</button>`}
     <button class="btn-danger" data-hd="delete">Delete from this device</button>`;
   show('histdetail');
@@ -4086,7 +4234,7 @@ function downloadCsv(code){
   const st = r.S, sm = tableSummary(st);
   const lines = [['Table', st.table.label], ['Code', code], ['Started', fmtDate(st.table.created)], ['Starting stack', st.startStack], ['Blinds', `${st.sb}/${st.bb}`], [],
     ['Player', 'Bought', 'Chips', 'Net', 'Hands won'], ...sm.rows.map(x => [x.name + (x.left ? ' (left)' : ''), x.bought, x.chips, x.net, x.won]), [],
-    ['Hand', 'Pot', 'Winners'], ...(st.hands || []).map(h => [h.n, h.pot, h.win.map(w => `${w[0]} ${w[1]}`).join('; ')])];
+    ['Hand', 'Pot', 'Winners', '7-2 bounty'], ...(st.hands || []).map(h => [h.n, h.pot, h.win.map(w => `${w[0]} ${w[1]}`).join('; '), h.bounty ? `${h.bounty[0]} ${h.bounty[1]}` : ''])];
   const blob = new Blob([lines.map(l => l.map(csvCell).join(',')).join('\n')], { type: 'text/csv' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = `${st.table.label.replace(/\s+/g, '-')}-${code}.csv`; document.body.appendChild(a); a.click();
@@ -4099,6 +4247,8 @@ $('#hd-actions').addEventListener('click', e => {
   const b = e.target.closest('[data-hd]'); if (!b) return;
   const a = b.dataset.hd;
   if (a === 'csv') downloadCsv(histCode);
+  else if (a === 'export'){ const r = store.json(hostKey(histCode)); if (r) exportTable(r.S); }
+  else if (a === 'continue'){ const r = store.json(hostKey(histCode)); if (r) importTable(r.S).catch(err => toast(err.message)); }
   else if (a === 'resume'){ Snd.init(); if (!hostResume(histCode)) toast('That table could not be opened.'); }
   else if (a === 'delete'){
     if (!b.classList.contains('armed')){ b.classList.add('armed'); b.textContent = 'Tap again to delete for good'; return; }
@@ -4151,7 +4301,7 @@ $('#go-create').addEventListener('click', () => {
   $('#create-title').textContent = `New table · Table ${count}`;
   show('create');
 });
-$('#go-join').addEventListener('click', () => { show('join'); });
+$('#go-join').addEventListener('click', () => { $('#j-code').value = ''; $('#j-err').textContent = ''; show('join'); });
 $$('[data-nav="home"]').forEach(b => b.addEventListener('click', goHome));
 $('#v-create').addEventListener('click', e => { const b = e.target.closest('[data-max]'); if (!b) return; const o = $('#c-max'); o.textContent = Math.max(2, Math.min(10, +o.textContent + +b.dataset.max)); });
 $('#c-open').addEventListener('click', () => { Snd.init(); hostCreate(); });
@@ -4161,6 +4311,7 @@ $('#j-code').addEventListener('input', e => { e.target.value = e.target.value.to
 
 /* boot */
 (function boot(){
+  $('#j-code').value = ''; $('#w-code').value = '';      // browsers like to restore old form values on reload
   if (typeof mqtt === 'undefined'){ document.body.innerHTML = '<p style="padding:24px">The connection library failed to load. Reload the page.</p>'; return; }
   const w = (QS.get('w') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
   if (w.length === 6){ watchStart(w, QS.get('b') ? +QS.get('b') : 0); return; }
