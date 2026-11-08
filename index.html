@@ -61,6 +61,7 @@ input{font:inherit}
 .btn:disabled{opacity:.3}
 .b-fold{background:transparent;border:1.5px solid var(--line);color:var(--ivory)}
 .b-call{background:var(--ivory);color:var(--ink)}
+.b-foldact{background:linear-gradient(180deg,var(--red),var(--red-deep));color:var(--ivory)}
 .b-raise{background:linear-gradient(180deg,var(--brass),var(--brass-deep));color:var(--ink)}
 .b-allin{background:linear-gradient(180deg,var(--red),var(--red-deep));color:var(--ivory);font-family:var(--display);font-weight:800;font-size:21px;letter-spacing:.06em;text-transform:uppercase}
 .cta{width:100%;height:60px;border:0;border-radius:16px;background:linear-gradient(180deg,var(--brass),var(--brass-deep));color:var(--ink);font-family:var(--display);font-weight:800;font-size:23px;letter-spacing:.08em;text-transform:uppercase;box-shadow:0 8px 22px rgba(0,0,0,.35)}
@@ -372,7 +373,7 @@ input[type=range]{width:100%;height:36px;accent-color:var(--brass);background:tr
       <label><span class="lbl">7-2 bounty</span><input class="txt" id="c-bounty" inputmode="numeric" value="30"></label>
       <p class="hint" style="grid-column:span 2;align-self:end;margin:0 0 4px">Win a hand holding 7-2 and every other player dealt in pays you this. Set 0 to turn it off.</p>
     </div>
-    <p class="hint">Players can top up between hands, but only back to the starting stack.</p>
+    <p class="hint">With fewer than 4 players, only one blind (the big blind) is posted. Players can top up between hands, but only back to the starting stack.</p>
     <p class="err" id="c-err" role="alert"></p>
     <button class="cta" id="c-open">Open table</button>
     <div class="resume" style="margin-top:4px"><div><b>Moving a game here?</b><span>Load a table file exported from another table. Everyone keeps their chips.</span></div><button class="btn b-fold" id="c-import" style="height:42px;padding:0 16px;flex:none">Import file</button></div>
@@ -3092,11 +3093,13 @@ function startHand(){
   S.lastDealt = S.players.filter(p => !p.out).map(p => p.tag); S.lastWin = [];
   S.handSB = S.sb; S.handBB = S.bb;
   S.dealer = nextSeat(S.dealer, p => !p.out);
-  if (liveN === 2){ S.sbIdx = S.dealer; S.bbIdx = nextSeat(S.dealer, p => !p.out); }
+  // Fewer than 4 players: one blind (the big blind amount), posted by the player left of the button.
+  S.single = liveN < 4;
+  if (S.single){ S.sbIdx = -1; S.bbIdx = nextSeat(S.dealer, p => !p.out); }
   else { S.sbIdx = nextSeat(S.dealer, p => !p.out); S.bbIdx = nextSeat(S.sbIdx, p => !p.out); }
-  const sbP = P(S.sbIdx), bbP = P(S.bbIdx);
-  put(sbP, S.sb); sbP.last = `Small blind ${fmt(sbP.bet)}`;
-  put(bbP, S.bb); bbP.last = `Big blind ${fmt(bbP.bet)}`;
+  if (!S.single){ const sbP = P(S.sbIdx); put(sbP, S.sb); sbP.last = `Small blind ${fmt(sbP.bet)}`; }
+  const bbP = P(S.bbIdx);
+  put(bbP, S.bb); bbP.last = `${S.single ? 'Blind' : 'Big blind'} ${fmt(bbP.bet)}`;
   S.currentBet = S.bb; S.minRaise = S.bb;
   log(`Hand ${S.hand}: ${P(S.dealer).name} has the button`);
   return progress(S.bbIdx);
@@ -3504,7 +3507,7 @@ function posTags(st, i){
   if (st.hand && i === st.dealer) t.push('<span class="dbtn" title="Dealer button">D</span>');
   const inHand = st.stage === 'betting' || st.stage === 'showdown';
   if (inHand && i === st.sbIdx) t.push('<span class="tag">SB</span>');
-  if (inHand && i === st.bbIdx) t.push('<span class="tag">BB</span>');
+  if (inHand && i === st.bbIdx) t.push(`<span class="tag">${st.single ? 'BLIND' : 'BB'}</span>`);
   return t.join('');
 }
 /* Mid-hand, pots only split at all-in amounts; chips above the last all-in are still a live pot. */
@@ -3521,7 +3524,7 @@ function hostRender(){
   if (!S) return;
   $('#h-label').textContent = S.table.label;
   $('#h-code').textContent = H.code;
-  $('#h-meta').textContent = `${S.hand ? 'Hand ' + S.hand + ' · ' : ''}Blinds ${fmt(S.sb)}/${fmt(S.bb)}${S.bounty ? ' · 7-2 bounty ' + fmt(S.bounty) : ''} · ${S.players.length}/${S.table.max} seats`;
+  $('#h-meta').textContent = `${S.hand ? 'Hand ' + S.hand + ' · ' : ''}${funded() < 4 ? `Blind ${fmt(S.bb)}` : `Blinds ${fmt(S.sb)}/${fmt(S.bb)}`}${S.bounty ? ' · 7-2 bounty ' + fmt(S.bounty) : ''} · ${S.players.length}/${S.table.max} seats`;
   $('#h-undo').disabled = !H.hist.length;
   $('#h-undo').hidden = VIEW; $('#h-menu').hidden = VIEW; $('#h-leave').hidden = !VIEW; $('#h-viewtag').hidden = !VIEW;
   const lobby = S.stage === 'lobby';
@@ -3716,10 +3719,13 @@ function renderHostMenu(){
   $('#menu-body').innerHTML = `
     <div class="m-sec m-row"><div><h3>Sound effects</h3><p class="hint">No sound? Turn the volume up and check the silent switch.</p></div>
       <button class="switch" data-m="sound" role="switch" aria-checked="${Snd.on}" aria-label="Sound effects"><span></span></button></div>
-    <div class="m-sec"><h3>Blinds</h3>
+    ${funded() < 4 ? `<div class="m-sec"><h3>Blind</h3>
+      <div class="add-row"><input class="txt" id="m-bb" inputmode="numeric" value="${S.bb}"><button class="btn-sec" data-m="blinds">Save</button></div>
+      <p class="hint" id="m-msg">With fewer than 4 players there's one blind, posted by the player left of the button. Small and big blinds return at 4 or more players. Changes start next hand.</p></div>`
+    : `<div class="m-sec"><h3>Blinds</h3>
       <div class="grid2"><label><span class="lbl">Small blind</span><input class="txt" id="m-sb" inputmode="numeric" value="${S.sb}"></label>
       <label><span class="lbl">Big blind</span><input class="txt" id="m-bb" inputmode="numeric" value="${S.bb}"></label></div>
-      <button class="btn-sec" data-m="blinds">Save blinds</button><p class="hint" id="m-msg">New blinds start with the next hand.</p></div>
+      <button class="btn-sec" data-m="blinds">Save blinds</button><p class="hint" id="m-msg">New blinds start with the next hand.</p></div>`}
     <div class="m-sec"><h3>7-2 bounty</h3>
       <div class="add-row"><input class="txt" id="m-bounty" inputmode="numeric" value="${S.bounty || 0}"><button class="btn-sec" data-m="bounty">Save</button></div>
       <p class="hint" id="m-bmsg">After a hand, tap the 7-2 button for a winner who shows 7-2. Set 0 to turn it off.</p></div>
@@ -3742,12 +3748,12 @@ $('#menu-body').addEventListener('click', e => {
   if (m === 'ptopup'){ phoneTopUp(); return; }
   if (!S) return;
   if (m === 'blinds'){
-    const sb = toInt($('#m-sb').value, 0), bb = toInt($('#m-bb').value, 0), msg = $('#m-msg');
+    const bb = toInt($('#m-bb').value, 0), sb = $('#m-sb') ? toInt($('#m-sb').value, 0) : Math.min(S.sb, bb || S.sb), msg = $('#m-msg');
     if (!sb || !bb){ msg.textContent = 'Enter both blinds as whole numbers.'; return; }
     if (bb < sb){ msg.textContent = 'The big blind must be at least the small blind.'; return; }
     if (sb === S.sb && bb === S.bb){ msg.textContent = 'Those are already the blinds.'; return; }
-    snap(); S.sb = sb; S.bb = bb; log(`Blinds go to ${fmt(sb)}/${fmt(bb)} next hand`); commit(null, { seq: false });
-    msg.textContent = `Saved. ${fmt(sb)}/${fmt(bb)} starts next hand.`;
+    snap(); S.sb = sb; S.bb = bb; log($('#m-sb') ? `Blinds go to ${fmt(sb)}/${fmt(bb)} next hand` : `Blind goes to ${fmt(bb)} next hand`); commit(null, { seq: false });
+    msg.textContent = $('#m-sb') ? `Saved. ${fmt(sb)}/${fmt(bb)} starts next hand.` : `Saved. A blind of ${fmt(bb)} starts next hand.`;
   } else if (m === 'bounty'){
     const raw = String($('#m-bounty').value).trim(), v = raw === '' ? 0 : (parseInt(raw.replace(/[^\d]/g, ''), 10) || 0), msg = $('#m-bmsg');
     if (v === (S.bounty || 0)){ msg.textContent = 'That is already the bounty.'; return; }
@@ -3779,7 +3785,7 @@ function actionButtons(st, i, scope, disabled){
   const callAll = toCall > 0 && toCall >= p.stack;
   const dis = disabled ? ' disabled' : '';
   return `<div class="btns three" data-scope="${scope}">
-    <button class="btn b-fold" data-act="fold"${dis}>Fold</button>
+    <button class="btn b-foldact" data-act="fold"${dis}>Fold</button>
     <button class="btn b-call" data-act="${toCall === 0 ? 'check' : 'call'}"${dis}>${toCall === 0 ? 'Check' : callAll ? 'Call · all in' : 'Call ' + fmt(toCall)}</button>
     <button class="btn b-raise" data-act="raise"${raiseOK && !disabled ? '' : ' disabled'}>${st.currentBet === 0 ? 'Bet' : 'Raise'}</button>
   </div>${p.locked && !disabled ? '<p class="dock-note">A short all-in did not reopen the raising. You can call or fold.</p>' : ''}`;
