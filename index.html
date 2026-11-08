@@ -364,16 +364,16 @@ input[type=range]{width:100%;height:36px;accent-color:var(--brass);background:tr
         <button class="round" data-max="1" aria-label="More seats">+</button>
       </div>
     </div>
-    <div class="grid3">
+    <div class="grid3" id="c-money">
       <label><span class="lbl">Starting stack</span><input class="txt" id="c-stack" inputmode="numeric" value="1000"></label>
-      <label><span class="lbl">Small blind</span><input class="txt" id="c-sb" inputmode="numeric" value="5"></label>
-      <label><span class="lbl">Big blind</span><input class="txt" id="c-bb" inputmode="numeric" value="10"></label>
+      <label id="c-sb-wrap"><span class="lbl">Small blind</span><input class="txt" id="c-sb" inputmode="numeric" value="5"></label>
+      <label><span class="lbl" id="c-bb-lbl">Big blind</span><input class="txt" id="c-bb" inputmode="numeric" value="10"></label>
     </div>
     <div class="grid3">
       <label><span class="lbl">7-2 bounty</span><input class="txt" id="c-bounty" inputmode="numeric" value="30"></label>
       <p class="hint" style="grid-column:span 2;align-self:end;margin:0 0 4px">Win a hand holding 7-2 and every other player dealt in pays you this. Set 0 to turn it off.</p>
     </div>
-    <p class="hint">With fewer than 4 players, only one blind (the big blind) is posted. Players can top up between hands, but only back to the starting stack.</p>
+    <p class="hint" id="c-blindhint"></p>
     <p class="err" id="c-err" role="alert"></p>
     <button class="cta" id="c-open">Open table</button>
     <div class="resume" style="margin-top:4px"><div><b>Moving a game here?</b><span>Load a table file exported from another table. Everyone keeps their chips.</span></div><button class="btn b-fold" id="c-import" style="height:42px;padding:0 16px;flex:none">Import file</button></div>
@@ -3246,9 +3246,10 @@ function joinUrl(){
 
 function hostCreate(){
   const err = $('#c-err');
-  const stack = toInt($('#c-stack').value, 0), sb = toInt($('#c-sb').value, 0), bb = toInt($('#c-bb').value, 0), max = +$('#c-max').textContent;
+  const max = +$('#c-max').textContent, stack = toInt($('#c-stack').value, 0), bb = toInt($('#c-bb').value, 0);
+  const sb = max < 4 ? Math.max(1, Math.min(toInt($('#c-sb').value, 1), bb || 1)) : toInt($('#c-sb').value, 0);
   const bountyRaw = String($('#c-bounty').value).trim(), bounty = bountyRaw === '' ? 0 : (parseInt(bountyRaw.replace(/[^\d]/g, ''), 10) || 0);
-  if (!stack || !sb || !bb){ err.textContent = 'Enter the stack and both blinds as whole numbers.'; return; }
+  if (!stack || !sb || !bb){ err.textContent = max < 4 ? 'Enter the stack and the blind as whole numbers.' : 'Enter the stack and both blinds as whole numbers.'; return; }
   if (bb < sb){ err.textContent = 'The big blind must be at least the small blind.'; return; }
   if (stack < bb * 2){ err.textContent = 'Give everyone at least two big blinds to start.'; return; }
   err.textContent = '';
@@ -4309,7 +4310,17 @@ $('#go-create').addEventListener('click', () => {
 });
 $('#go-join').addEventListener('click', () => { $('#j-code').value = ''; $('#j-err').textContent = ''; show('join'); });
 $$('[data-nav="home"]').forEach(b => b.addEventListener('click', goHome));
-$('#v-create').addEventListener('click', e => { const b = e.target.closest('[data-max]'); if (!b) return; const o = $('#c-max'); o.textContent = Math.max(2, Math.min(10, +o.textContent + +b.dataset.max)); });
+/* Under 4 seats a hand only ever has one blind, so the form asks for just that one. */
+function syncBlindFields(){
+  const single = +$('#c-max').textContent < 4;
+  $('#c-sb-wrap').hidden = single;
+  $('#c-money').className = single ? 'grid2' : 'grid3';
+  $('#c-bb-lbl').textContent = single ? 'Blind' : 'Big blind';
+  $('#c-blindhint').textContent = (single ? 'With fewer than 4 players there is one blind, posted by the player left of the button.'
+    : 'Small and big blinds apply with 4 or more players. If fewer are seated, only the big blind is posted.') + ' Players can top up between hands, but only back to the starting stack.';
+}
+$('#v-create').addEventListener('click', e => { const b = e.target.closest('[data-max]'); if (!b) return; const o = $('#c-max'); o.textContent = Math.max(2, Math.min(10, +o.textContent + +b.dataset.max)); syncBlindFields(); });
+syncBlindFields();
 $('#c-open').addEventListener('click', () => { Snd.init(); hostCreate(); });
 $('#j-go').addEventListener('click', () => { Snd.init(); phoneJoin(); });
 $('#j-code').addEventListener('input', e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6); });
