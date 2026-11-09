@@ -196,7 +196,7 @@ input{font:inherit}
 .hseat .nm span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .hseat .nm em{font-style:normal;flex:none;font-size:max(8px,calc(var(--u)*.95));font-weight:800;letter-spacing:.06em;padding:0 calc(var(--u)*.4);border-radius:calc(var(--u)*.3);background:rgba(244,236,216,.12);color:var(--muted)}
 .hseat .stk{font-family:var(--display);font-weight:800;font-size:max(15px,calc(var(--u)*2.15));line-height:1.05;color:var(--brass);font-variant-numeric:tabular-nums}
-.hseat .st{margin-top:calc(var(--u)*.45);max-width:100%;font-size:max(10px,calc(var(--u)*1.2));color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+.hseat .st{margin-top:calc(var(--u)*.45);max-width:100%;font-size:max(10px,calc(var(--u)*1.2));line-height:1.2;color:var(--muted);text-align:center;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;font-variant-numeric:tabular-nums;text-shadow:0 1px 2px rgba(0,0,0,.6)}
 .hseat.acting .av{box-shadow:0 0 0 calc(var(--u)*.3) #0b1512,0 0 0 calc(var(--u)*.6) var(--brass),0 0 calc(var(--u)*2.6) rgba(224,177,85,.7)}
 .hseat.acting .plate{box-shadow:inset 0 0 0 calc(var(--u)*.15) var(--brass),0 0 calc(var(--u)*2) rgba(224,177,85,.35)}
 .hseat.acting .st{color:var(--brass);font-weight:700}
@@ -260,7 +260,7 @@ input{font:inherit}
 .mine-pay p{margin:0;font-size:14px}
 .viewer-tag{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:2px 8px}
 .lobby{position:absolute;inset:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:center;padding:12px 0;overflow-y:auto}
-.qrbox{background:var(--ivory);border-radius:18px;padding:14px;width:min(100%,300px);justify-self:center;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.qrbox{background:var(--ivory);color:var(--ink);border-radius:18px;padding:14px;width:min(100%,300px);justify-self:center;box-shadow:0 10px 30px rgba(0,0,0,.4)}
 .qrbox svg{display:block;width:100%;height:auto}
 .joininfo{display:grid;gap:14px;align-content:center;min-width:0}
 .joininfo .big{font-family:var(--display);font-weight:900;font-size:clamp(44px,7vw,76px);letter-spacing:.18em;color:var(--brass);line-height:1}
@@ -2957,7 +2957,15 @@ const fmt = n => Math.round(n).toLocaleString('en-US');
 /* Every part of a " · " joined line starts with a capital: "Owes 30 · Must buy in". */
 const capParts = t => String(t).replace(/(^|· )([a-z])/g, (m, a, b) => a + b.toUpperCase());
 /* Shrink a big number until it fits its space (long stacks like 100,000 on a small phone). */
-function fitFont(el, max, min, fits){ if (!el || !el.getClientRects().length) return; let f = max; el.style.fontSize = f + 'px'; while (f > min && !fits()){ f -= 2; el.style.fontSize = f + 'px'; } }
+/* Each step forces a layout, so a key (the text and the space it has) skips the whole search when nothing changed. */
+function fitFont(el, max, min, fits, key){
+  if (!el || !el.getClientRects().length) return;
+  if (key !== undefined && el.__fit === key) return;
+  let f = max; el.style.fontSize = f + 'px'; while (f > min && !fits()){ f -= 2; el.style.fontSize = f + 'px'; }
+  el.__fit = key;
+}
+/* Write HTML only when it changed, so a redraw with nothing new doesn't rebuild that part of the page. */
+function setHTML(el, h){ if (el && el.__h !== h){ el.innerHTML = h; el.__h = h; } }
 const toAmt = (v, d) => { const n = Math.round(parseFloat(String(v).replace(/[^\d.]/g, '')) * 100) / 100; return Number.isFinite(n) && n > 0 ? n : d; };
 const toInt = (v, d) => { const n = parseInt(String(v).replace(/[^\d]/g, ''), 10); return Number.isFinite(n) && n > 0 ? n : d; };
 const reduced = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -3183,15 +3191,17 @@ function openSheet(id){
   el.hidden = false;
   requestAnimationFrame(() => requestAnimationFrame(() => { if (el.__tok === t) el.classList.add('open'); }));
 }
+const SHEETS = $$('.sheet');           // the sheets are fixed parts of the page, so find them once
+const sheetOpen = () => SHEETS.some(sh => !sh.hidden);
 function closeSheets(only){
-  $$('.sheet').forEach(el => {
+  SHEETS.forEach(el => {
     if (el.hidden || (only && '#' + el.id !== only)) return;
     const t = el.__tok = ++sheetTok;
     el.classList.remove('open');
     setTimeout(() => { if (el.__tok === t) el.hidden = true; }, 230);
   });
 }
-$$('.sheet').forEach(el => el.addEventListener('click', e => { if (e.target === el || e.target.closest('[data-close]')) closeSheets(); }));
+SHEETS.forEach(el => el.addEventListener('click', e => { if (e.target === el || e.target.closest('[data-close]')) closeSheets(); }));
 
 /* ================= betting engine (runs on the table device only) ================= */
 let S = null;
@@ -3203,6 +3213,13 @@ const funded = () => S.players.filter(p => p.stack > 0).length;
 const live = (st, i) => (st.stage === 'betting' || st.stage === 'showdown') && !st.players[i].folded && !st.players[i].out;
 function nextSeat(i, pred){ const n = S.players.length; for (let k = 1; k <= n; k++){ const j = ((i + k) % n + n) % n; if (pred(S.players[j])) return j; } return -1; }
 function put(p, amt){ amt = Math.max(0, Math.min(amt, p.stack)); p.stack -= amt; p.bet += amt; p.committed += amt; if (p.stack === 0) p.allIn = true; return amt; }
+/* Most player i can bet to this street: their whole stack, but never more than the deepest opponent still in the hand can match.
+   A chip leader's all-in is capped there; the chips above it stay in their stack. */
+function maxTo(st, i){
+  const p = st.players[i];
+  const cover = Math.max(st.currentBet, ...st.players.filter((q, k) => k !== i && !q.folded && !q.out).map(q => q.bet + q.stack));
+  return Math.min(p.bet + p.stack, cover);
+}
 function log(text){ S.log.push(text); if (S.log.length > 30) S.log.shift(); }
 function newPlayer(name, pid, tag, av){
   return { name, pid, tag, av: freeAvatar(S, av), stack: S.startStack, bought: S.startStack, bet: 0, committed: 0, folded: true, allIn: false, acted: false, locked: false, out: false, last: S.hand ? 'Dealt in next hand' : '', topup: false, leaving: false };
@@ -3296,8 +3313,22 @@ function progress(from){
   if (j >= 0){ S.toAct = j; return null; }
   return endStreet();
 }
+/* The part of the top bet nobody matched goes straight back to whoever bet it, so it never becomes a pot of its own. */
+function returnUncalled(){
+  const ps = S.players.filter(p => !p.out), top = Math.max(0, ...ps.map(p => p.bet));
+  const lead = ps.filter(p => p.bet === top);
+  if (lead.length !== 1 || lead[0].folded) return null;
+  const p = lead[0], back = top - Math.max(0, ...ps.filter(q => q !== p).map(q => q.bet));
+  if (back <= 0) return null;
+  p.bet -= back; p.committed -= back; p.stack += back;
+  if (p.stack > 0) p.allIn = false;
+  log(`${p.name} got back ${fmt(back)} nobody called`);
+  return { p, back };
+}
 function endStreet(){
+  const ret = returnUncalled();
   S.players.forEach(p => { p.bet = 0; p.acted = false; p.locked = false; if (canAct(p)) p.last = ''; });
+  if (ret) ret.p.last = `${fmt(ret.back)} returned`;
   S.currentBet = 0; S.minRaise = S.handBB;
   const able = S.players.filter(canAct).length;
   if (S.street >= 3 || able <= 1){
@@ -3336,18 +3367,21 @@ function engineAct(i, kind, to){
   else if (kind === 'check'){ p.last = 'Checked'; fx = 'check'; }
   else if (kind === 'call'){ put(p, toCall); p.last = p.allIn ? `All in for ${fmt(p.bet)}` : `Called ${fmt(p.bet - before)}`; fx = p.allIn ? 'allin' : 'call'; }
   else {
-    const max = p.bet + p.stack;
+    const max = maxTo(S, i);
     const target = kind === 'allin' ? max : Math.min(Math.max(Math.round(to) || 0, 0), max);
     if (target <= S.currentBet){
       put(p, target - p.bet); p.last = p.allIn ? `All in for ${fmt(p.bet)}` : `Called ${fmt(p.bet - before)}`; fx = p.allIn ? 'allin' : 'call';
     } else {
       const opening = S.currentBet === 0;
       put(p, target - p.bet);
+      // Betting everyone else's whole stack is an all-in, even with chips left over. Anyone who calls is all in too.
+      if (p.bet >= max) p.allIn = true;
       const inc = p.bet - S.currentBet, full = inc >= S.minRaise;
       S.players.forEach((q, j) => { if (j === i || !canAct(q)) return; if (full) q.locked = false; else if (q.acted) q.locked = true; q.acted = false; });
       if (full) S.minRaise = inc;
       S.currentBet = p.bet;
-      p.last = p.allIn ? `All in for ${fmt(p.bet)}` : opening ? `Bet ${fmt(p.bet)}` : `Raised to ${fmt(p.bet)}`;
+      // a capped all-in keeps chips, so say why: nobody can match more
+      p.last = p.allIn ? `All in for ${fmt(p.bet)}${p.stack > 0 ? ' (covers everyone)' : ''}` : opening ? `Bet ${fmt(p.bet)}` : `Raised to ${fmt(p.bet)}`;
       fx = p.allIn ? 'allin' : (opening ? 'bet' : 'raise');
     }
   }
@@ -3359,7 +3393,7 @@ function engineAct(i, kind, to){
 }
 /* Server-side legality check for a phone's request, using the same limits the buttons show. */
 function legal(i, kind, to){
-  const p = P(i), toCall = Math.max(0, S.currentBet - p.bet), max = p.bet + p.stack;
+  const p = P(i), toCall = Math.max(0, S.currentBet - p.bet), max = maxTo(S, i);
   const minTo = S.currentBet === 0 ? S.handBB : S.currentBet + S.minRaise;
   if (kind === 'fold' || kind === 'call') return true;
   if (kind === 'check') return toCall === 0;
@@ -3440,9 +3474,9 @@ function hostCreate(){
   hostStart(0);
 }
 function hostResume(code){
-  { const r0 = store.json(hostKey(code)); if (r0 && r0.S) { ensureAvatars(r0.S); store.set(hostKey(code), JSON.stringify(r0)); } }
   AD.paused = true; clearInterval(AD.timer); AD.timer = 0; AD.at = 0;
   const rec = store.json(hostKey(code)); if (!rec || !rec.S) return false;
+  if (ensureAvatars(rec.S)) store.set(hostKey(code), JSON.stringify(rec));
   S = rec.S;
   Object.assign(H, { code, pubN: rec.pubN || 0, fxN: rec.fxN || 0, hist: [], online: {}, broker: rec.broker || 0, last: { v: 99 } });
   hostStart(H.broker, true);
@@ -3495,9 +3529,11 @@ function hostConnect(idx, allowFailover){
     hostCmd(m).catch(() => {});
   });
 }
+/* A shallow copy is enough because it is turned into text straight away. The hand history (up to 1,000 hands)
+   stays on the table device: phones and viewers never read it, and it would ride along with every action. */
 function hostPublic(){
-  const pub = JSON.parse(JSON.stringify(S));
-  pub.players.forEach(p => { delete p.pid; p.on = !!H.online[p.tag]; });
+  const { hands, ...pub } = S;
+  pub.players = S.players.map(({ pid, ...p }) => ({ ...p, on: !!H.online[p.tag] }));
   pub.v = ++H.pubN;
   return pub;
 }
@@ -3637,9 +3673,10 @@ function autoDeal(restart){
   hostRenderDock();
   AD.timer = setInterval(() => {
     if (!S || S.stage !== 'done' || S.closed || AD.paused){ clearInterval(AD.timer); AD.timer = 0; AD.at = 0; return; }
-    if ($$('.sheet').some(sh => !sh.hidden)) AD.at = Math.max(AD.at, Date.now() + 1500);
+    if (sheetOpen()) AD.at = Math.max(AD.at, Date.now() + 1500);
     const left = Math.ceil((AD.at - Date.now()) / 1000);
-    const c = $('#h-count'); if (c) c.textContent = left > 0 ? `Next hand in ${left}s` : 'Dealing…';
+    // the timer runs 4 times a second but the text only changes once a second
+    const c = $('#h-count'), txt = left > 0 ? `Next hand in ${left}s` : 'Dealing…'; if (c && c.textContent !== txt) c.textContent = txt;
     if (Date.now() >= AD.at){ clearInterval(AD.timer); AD.timer = 0; AD.at = 0; hostDeal(); }
   }, 250);
 }
@@ -3696,7 +3733,7 @@ function renderWatchers(){
   const n = VIEW ? 0 : Object.keys(H.viewers).length;
   el.hidden = !n;
   const h = n ? `${EYE}${n} watching` : '';
-  if (el.__h !== h){ el.innerHTML = h; el.__h = h; }
+  setHTML(el, h);
 }
 function seatStatus(st, i, me){ return capParts(seatStatus0(st, i, me)); }
 function seatStatus0(st, i, me){
@@ -3741,7 +3778,7 @@ function hostRender(){
     funded() < 4 ? stat('Blind', fmt(S.bb), 'gold') : stat('Blinds', `${fmt(S.sb)}<i>/</i>${fmt(S.bb)}`, 'gold'),
     stat('Seats', `${S.players.length}<i>/</i>${S.table.max}`),
   ].join('');
-  if ($('#h-meta').__h !== metaHTML){ $('#h-meta').innerHTML = metaHTML; $('#h-meta').__h = metaHTML; }
+  setHTML($('#h-meta'), metaHTML);
   $('#h-undo').disabled = !H.hist.length;
   $('#h-undo').hidden = VIEW; $('#h-menu').hidden = VIEW; $('#h-leave').hidden = !VIEW; $('#h-viewtag').hidden = !VIEW;
   renderWatchers();
@@ -3750,11 +3787,11 @@ function hostRender(){
   $('#h-lobby').hidden = !lobby; $('#h-felt').hidden = lobby; $('#h-seats').hidden = lobby;
   if (wasHidden && !lobby){ TG.W = 0; }
   if (lobby){
+    const url = joinUrl();
     $('#h-bigcode').textContent = H.code;
-    $('#h-url').textContent = joinUrl();
-    if ($('#h-qr').dataset.code !== H.code){ $('#h-qr').innerHTML = qrSvg(joinUrl()); $('#h-qr').dataset.code = H.code; }
+    if ($('#h-qr').dataset.code !== H.code){ $('#h-qr').innerHTML = qrSvg(url); $('#h-qr').dataset.code = H.code; }
     $('#h-seatcount').textContent = `Players ${S.players.length}/${S.table.max}`;
-    $('#h-url').textContent = (S.table.movedFrom ? `Moved from ${S.table.movedFrom}. Everyone rejoins here with the same name to get their chips back. ` : '') + joinUrl();
+    $('#h-url').textContent = (S.table.movedFrom ? `Moved from ${S.table.movedFrom}. Everyone rejoins here with the same name to get their chips back. ` : '') + url;
     $('#h-plist').innerHTML = S.players.length ? S.players.map(p => `<span>${avDisc(p.av, 26)}${esc(p.name)}<i class="dot ${isOn(p) ? 'on' : ''}"></i></span>`).join('') : '<span class="empty">Nobody yet. Scan the code with a phone camera.</span>';
   } else {
     $('#h-street').textContent = S.closed ? 'Table closed' : S.stage === 'betting' ? STREETS[S.street] : S.stage === 'showdown' ? 'Showdown' : S.stage === 'over' ? 'Game paused' : 'Hand complete';
@@ -3805,10 +3842,12 @@ function tableGeom(){
   if (!W || !H || (W === TG.W && H === TG.H)) return false;
   const u = Math.max(5.5, Math.min(14, W / 100, H / 60));
   const pw = Math.max(108, u * 15);                 // seat plate width
-  // A seat reaches ~8.9u above its centre (cards over the avatar) and ~6.5u below (plate + status), so centre the table 1.2u low.
-  const rx = Math.max(60, W / 2 - pw / 2 - u * .8), ry = Math.max(60, H / 2 - u * 7.9), dy = u * 1.2;
+  // A seat reaches ~8.9u above its centre (cards over the avatar) and below it the plate plus up to two status lines,
+  // so the rail is sized to fit both and the table sits a little low to balance them.
+  const line = Math.max(10, u * 1.2) * 1.2, above = u * 8.9, below = u * 5.05 + line * 2;
+  const rx = Math.max(60, W / 2 - pw / 2 - u * .8), ry = Math.max(60, H / 2 - (above + below) / 2 - u * .2), dy = (above - below) / 2;
   const cw = Math.min(u * 6.2, Math.max(24, (rx - u * 11) * 2 * .82 / 5.6));
-  Object.assign(TG, { W, H, u, rx, ry, dy });
+  Object.assign(TG, { W, H, u, rx, ry, dy, cw });
   const st = $('#h-felt').style;
   st.setProperty('--dy', dy + 'px');
   st.setProperty('--u', u + 'px'); st.setProperty('--pw', pw + 'px'); st.setProperty('--cw', cw + 'px'); st.setProperty('--rx', rx + 'px');
@@ -3817,7 +3856,14 @@ function tableGeom(){
   return true;
 }
 /* Parameters t on the ellipse so that n seats sit at equal distances along the rail, seat 0 at the bottom, going clockwise. */
+/* 720 steps around the ellipse is real work, and the answer only changes with the seat count or the table size. */
+const seatCache = { key: '', ts: null };
 function seatParams(n, rx, ry){
+  const key = n + '|' + rx + '|' + ry;
+  if (seatCache.key !== key){ seatCache.ts = seatParams0(n, rx, ry); seatCache.key = key; }
+  return seatCache.ts;
+}
+function seatParams0(n, rx, ry){
   const M = 720, ts = [], len = [0];
   for (let k = 0; k <= M; k++) ts.push(Math.PI / 2 + (k / M) * Math.PI * 2);
   for (let k = 1; k <= M; k++){
@@ -3825,8 +3871,9 @@ function seatParams(n, rx, ry){
     len.push(len[k - 1] + Math.hypot(rx * (Math.cos(b) - Math.cos(a)), ry * (Math.sin(b) - Math.sin(a))));
   }
   const L = len[M], out = [];
+  let k = 0;                                        // targets only grow, so carry on from the last seat instead of rescanning
   for (let i = 0; i < n; i++){
-    const target = L * i / n; let k = 0;
+    const target = L * i / n;
     while (k < M && len[k + 1] < target) k++;
     const f = len[k + 1] > len[k] ? (target - len[k]) / (len[k + 1] - len[k]) : 0;
     out.push(ts[k] + f * (ts[k + 1] - ts[k]));
@@ -3841,6 +3888,13 @@ function seatTag(st, i){
   if (i === st.sbIdx) return 'SB';
   if (i === st.bbIdx) return st.single ? 'BLIND' : 'BB';
   return '';
+}
+/* Seat labels get up to two lines. Each phrase is kept whole, so a long label only breaks at a " · "
+   or before "(covers everyone)": "Bought in 1,000 ·" / "Paid Ann 30". */
+function seatStatusHTML(t){
+  if (!t) return '&nbsp;';
+  const keep = s => esc(s).replace(/ /g, '&nbsp;');
+  return t.split(' · ').map(part => part.split(' (').map(keep).join(' (')).join('&nbsp;· ');
 }
 function hostRenderSeats(){
   if (!S || S.stage === 'lobby'){ if (S) hostRender(); return; }
@@ -3858,7 +3912,7 @@ function hostRenderSeats(){
       ${avOk(p.av) ? `<div class="av icon" style="--c:${AVATARS[p.av].c}">${avSvg(p.av)}<i class="dot ${isOn(p) ? 'on' : ''}"></i></div>`
                    : `<div class="av" style="--c:${col}">${esc(initials(p.name))}<i class="dot ${isOn(p) ? 'on' : ''}"></i></div>`}
       <div class="plate"><div class="nm"><span>${esc(p.name)}</span>${tag ? `<em>${tag}</em>` : ''}</div><div class="stk">${fmt(p.stack)}</div></div>
-      <div class="st${won ? ' won' : ''}">${esc(seatStatus(S, i)) || '&nbsp;'}</div>` };
+      <div class="st${won ? ' won' : ''}">${seatStatusHTML(seatStatus(S, i))}</div>` };
   }));
   // bets sit on the felt between each seat and the centre
   patchList($('#h-bets'), S.players.map((p, i) => {
@@ -3871,10 +3925,48 @@ function hostRenderSeats(){
   }), 'div');
   placeTableBits();
 }
+/* Where a bet may sit, relative to its first clear spot: a = further in, p = sideways. Sorted by how far that is
+   (stepping in is preferred over sliding sideways), so the search stops at the first clear spot instead of trying
+   all ~3,600 of them for every bet. The sort is stable, so ties keep the old scan order and pick the same spot.
+   Built once per table size. */
+const spotCache = { u: -1, near: [], far: [] };
+function betSpots(u){
+  if (spotCache.u === u) return spotCache;
+  const near = [], far = [], byCost = (x, y) => x[2] - y[2];
+  // near: up to 9u in and 9u sideways. far: the ring beyond that, up to 14u in and 24u sideways, only tried when near has no clear spot.
+  for (let a = 0; a <= u * 14; a += 3) for (let p = -u * 24; p <= u * 24; p += 3){
+    const c = [a, p, a + Math.abs(p) * 1.6];
+    (a <= u * 9 && Math.abs(p) <= u * 9 ? near : far).push(c);
+  }
+  near.sort(byCost); far.sort(byCost);
+  Object.assign(spotCache, { u, near, far });
+  return spotCache;
+}
 /* Measured layout: the dealer button sits right beside the dealer's avatar, and each bet sits the same
    gap away from its seat, slid sideways if needed so chips never cover any text on the table. */
+/* On a short table the middle column (street, pot, cards, side pots) can reach the seats at the top or bottom.
+   Measure it with full-size cards, and if it comes too close, shrink the cards just enough to clear. */
+function fitCentre(){
+  const felt = $('#h-felt').style, full = TG.cw; if (!full) return;
+  if (felt.getPropertyValue('--cw') !== full + 'px') felt.setProperty('--cw', full + 'px');
+  const items = $$('.stage .center > *').filter(e => !e.hidden && e.getClientRects().length).map(e => e.getBoundingClientRect());
+  if (!items.length) return;
+  const top = Math.min(...items.map(r => r.top)), bot = Math.max(...items.map(r => r.bottom));
+  const l = Math.min(...items.map(r => r.left)), r = Math.max(...items.map(r => r.right));
+  let room = Infinity;
+  const mid = (top + bot) / 2;
+  $$('#h-seats .hseat').forEach(s => { const sr = s.getBoundingClientRect(); if (Math.abs((sr.top + sr.bottom) / 2 - mid) < TG.ry * .6) return;   // seats beside the column don't count
+    ['.hole', '.av', '.plate', '.st'].forEach(q => {
+    const e = s.querySelector(q), b = e && e.getClientRects().length ? e.getBoundingClientRect() : null;
+    if (!b || !b.width || b.right < l || b.left > r) return;
+    room = Math.min(room, b.top >= bot ? b.top - bot : b.bottom <= top ? top - b.bottom : -Math.min(b.bottom - top, bot - b.top));
+  }); });
+  const need = TG.u * .5 - room;
+  if (need > 0) felt.setProperty('--cw', Math.max(12, full - need * 2 / 1.4) + 'px');    // the column is centred, so it shrinks from both ends
+}
 function placeTableBits(){
   const box = $('#h-bets'), O = box.getBoundingClientRect(); if (!O.width || !S) return;
+  fitCentre();
   const u = TG.u, G = u * 1.5, cx = O.width / 2, cy = O.height / 2 + TG.dy;
   const rel = r => ({ l: r.left - O.left, t: r.top - O.top, r: r.right - O.left, b: r.bottom - O.top });
   const hit = (a, b, m = 0) => a.l < b.r + m && a.r > b.l - m && a.t < b.b + m && a.b > b.t - m;
@@ -3904,21 +3996,28 @@ function placeTableBits(){
     const nearOwn = r => own.some(p => hit(r, p, G));
     // first spot straight in from the seat that is a full gap clear of it
     let k = 0; while (k < L && nearOwn(rect(sx + dx * k, sy + dy * k))) k += 2;
+    // the cheap on-the-felt test first, then the overlap tests
     const ok = (x, y) => { const r = rect(x, y);
-      return !nearOwn(r) && !blocks.some(b => hit(r, b, u * .4)) && !texts.some(t => hit(r, t, u * .6))
-        && r.l > felt.l + u && r.r < felt.r - u && r.t > felt.t + u * .5 && r.b < felt.b - u * .5; };
-    // closest clear spot to it: prefer stepping a little further in over sliding sideways
-    let best = null, bc = Infinity;
-    for (let a = 0; a <= u * 9; a += 3) for (let p = -u * 9; p <= u * 9; p += 3){
-      const c = a + Math.abs(p) * 1.6; if (c >= bc) continue;
-      const x = sx + dx * (k + a) - dy * p, y = sy + dy * (k + a) + dx * p;
-      if (ok(x, y)){ best = [x, y]; bc = c; }
+      return r.l > felt.l + u && r.r < felt.r - u && r.t > felt.t + u * .5 && r.b < felt.b - u * .5
+        && !nearOwn(r) && !blocks.some(b => hit(r, b, u * .4)) && !texts.some(t => hit(r, t, u * .6)); };
+    // closest clear spot to it: candidates come best-first, so the first clear one is the answer
+    // nothing clear close by (a long side-pot line, a cramped screen): look further out before giving up
+    let best = null;
+    const spots = betSpots(u);
+    for (const list of [spots.near, spots.far]){
+      for (const [a, p] of list){
+        const x = sx + dx * (k + a) - dy * p, y = sy + dy * (k + a) + dx * p;
+        if (ok(x, y)){ best = [x, y]; break; }
+      }
+      if (best) break;
     }
     const [x, y] = best || [sx + dx * k, sy + dy * k];
     el.style.setProperty('--x', x.toFixed(1) + 'px'); el.style.setProperty('--y', y.toFixed(1) + 'px');
     const r = rect(x, y); blocks.push(r);
     if (wr && hit(r, wr, u * .5)) wordsHit = true;
   });
+  // the faint "HOME GAME" also steps aside for the side-pot line and the board
+  if (wr && texts.some(t => hit(wr, t, 0))) wordsHit = true;
   if (words) words.style.opacity = wordsHit ? '0' : '';
 }
 function relayoutTable(){ if (tableGeom() && S && S.stage !== 'lobby') hostRenderSeats(); }
@@ -3960,7 +4059,7 @@ function hostRenderDock(){
   } else if (S.stage === 'over'){
     const left = S.players.filter(p => p.stack > 0);
     msg = `<b>${left.length === 1 ? esc(left[0].name) + ' has every chip' : 'Waiting for chips'}</b><span>Busted players can buy in from their phones, or you can buy them in by tapping their seat.</span>`;
-    btns = bountyButtons() + `<button class="btn b-raise" data-h="deal"${S.players.filter(p => p.stack > 0).length < 2 ? ' disabled' : ''}>Deal hand ${S.hand + 1}</button>`;
+    btns = bountyButtons() + `<button class="btn b-raise" data-h="deal"${left.length < 2 ? ' disabled' : ''}>Deal hand ${S.hand + 1}</button>`;
   } else {
     cls = ' result';
     const n = nextSeat(S.dealer, p => p.stack > 0);
@@ -3972,7 +4071,9 @@ function hostRenderDock(){
   if (S.closed){ cls = ''; const pl = settlePlan(S); msg = `<b>Table closed</b><span>${pl.pays.length ? pl.pays.map(x => `${esc(x.from)} pays ${esc(x.to)} ${moneyText(x.chips, pl.m)}`).join(' · ') : 'Everyone finished even.'}</span>`; btns = VIEW ? `<button class="btn b-raise" data-h="home">Back to start</button>` : ''; }
   else if (VIEW) btns = '';
   else if (S.stage === 'lobby' || S.stage === 'over' || (S.stage === 'done' && !(AD.at && !AD.paused))) btns = `<button class="btn b-fold" data-h="close">Close table</button>` + btns;
-  d.innerHTML = `<div class="msg${cls}">${capParts(msg)}</div><div class="btns">${btns}</div>`;
+  setHTML(d, `<div class="msg${cls}">${capParts(msg)}</div><div class="btns">${btns}</div>`);
+  // the bar can grow a row (7-2 buttons, countdown) and squeeze the table: re-fit the seats now, not on the next resize callback
+  relayoutTable();
 }
 function hostFx(fx, opts){
   const seat = tag => $(`.hseat[data-tag="${tag}"]`);
@@ -4161,12 +4262,12 @@ $('#menu-body').addEventListener('click', e => {
 
 /* ================= shared action buttons + raise sheet ================= */
 function actionButtons(st, i, scope, disabled){
-  const p = st.players[i], toCall = Math.max(0, st.currentBet - p.bet), max = p.bet + p.stack;
+  const p = st.players[i], toCall = Math.max(0, st.currentBet - p.bet), max = maxTo(st, i);
   const minTo = st.currentBet === 0 ? st.handBB : st.currentBet + st.minRaise;
   // Raise opens the sheet, which also holds All in. It stays available whenever you can put in more than a call.
   const raiseOK = !p.locked && max > st.currentBet;
-  // Calling puts you all in, or the bet you face is someone's all in
-  const callAll = toCall > 0 && (toCall >= p.stack || st.players.some((q, k) => k !== i && q.allIn && !q.folded && q.bet === st.currentBet));
+  // Only label the call as all-in when calling takes your whole stack. Facing a shorter stack's all-in, show the amount.
+  const callAll = toCall > 0 && toCall >= p.stack;
   const dis = disabled ? ' disabled' : '';
   return `<div class="btns three" data-scope="${scope}">
     <button class="btn b-foldact" data-act="fold"${dis}>Fold</button>
@@ -4176,7 +4277,7 @@ function actionButtons(st, i, scope, disabled){
 }
 let R = null;
 function openRaise(st, i, onOk){
-  const p = st.players[i], max = p.bet + p.stack;
+  const p = st.players[i], max = maxTo(st, i);
   const min = Math.min(st.currentBet === 0 ? st.handBB : st.currentBet + st.minRaise, max);
   R = { st, i, min, max, unit: st.handSB || 1, step: st.handBB || 1, val: min, onOk };
   $('#r-title').textContent = min >= max ? 'All in' : st.currentBet === 0 ? 'Bet' : 'Raise to';
@@ -4311,7 +4412,7 @@ async function phoneStart(code, pid, name, b){
   show('phone');
   $('#p-name').textContent = name; $('#p-label').textContent = 'Table'; $('#p-code').textContent = code;
   $('#p-status').textContent = 'Connecting to the table…';
-  $('#p-dock').innerHTML = '';
+  setHTML($('#p-dock'), '');
   keepAwake();
   phoneConnect(Pn.broker);
 }
@@ -4413,14 +4514,16 @@ function phoneRender(){
   $('#p-street').textContent = st.closed ? 'Closed' : st.stage === 'betting' ? STREETS[st.street] : st.stage === 'showdown' ? 'Showdown' : st.stage === 'lobby' ? 'Waiting to deal' : 'Between hands';
   $('#p-board').innerHTML = boardHTML(st, Pn.last);
   $('#p-pot').textContent = fmt(potTotal(st));
-  fitFont($('#p-pot'), 30, 18, () => $('#p-strip').scrollWidth <= $('#p-strip').clientWidth);
+  const strip = $('#p-strip');
+  fitFont($('#p-pot'), 30, 18, () => strip.scrollWidth <= strip.clientWidth, $('#p-street').textContent + '|' + $('#p-pot').textContent + '|' + strip.clientWidth);
   const myTurn = st.stage === 'betting' && st.toAct === me && me >= 0;
   $('#p-me').classList.toggle('turn', myTurn && !Pn.pending);
   const avh = p ? avDisc(p.av, 34) : '';
-  if ($('#p-av').__h !== avh){ $('#p-av').innerHTML = avh; $('#p-av').__h = avh; }
+  setHTML($('#p-av'), avh);
   if (p){
-    $('#p-stack').textContent = fmt(p.stack);
-    fitFont($('#p-stack'), 46, 26, () => $('#p-stack').getBoundingClientRect().width <= $('#p-me').clientWidth * .56);
+    const stk = $('#p-stack'), box = $('#p-me');
+    stk.textContent = fmt(p.stack);
+    fitFont(stk, 46, 26, () => stk.getBoundingClientRect().width <= box.clientWidth * .56, stk.textContent + '|' + box.clientWidth);
     $('#p-bet').textContent = p.bet ? `In front: ${fmt(p.bet)}` : 'Chips';
     $('#p-status').textContent = st.closed ? 'This table is closed.' : myTurn ? 'Your turn' : seatStatus(st, me, true) || (st.stage === 'lobby' ? "You're in. Waiting for the first deal." : st.stage === 'betting' ? `Waiting for ${st.players[st.toAct].name}` : 'Waiting for the next hand');
   } else if (!Pn.seated){
@@ -4439,7 +4542,7 @@ function phoneRender(){
   if (st.closed){
     const plan = settlePlan(st), mine = plan.rows.find(r => p && r.name === p.name);
     const sh = `<span class="lbl">Who pays who</span><div class="pays">${paysHTML(st, plan, p ? p.name : '', 22)}</div><p class="hint">${esc(rateText(plan.m))}</p>`;
-    if ($('#p-settle').__h !== sh){ $('#p-settle').innerHTML = sh; $('#p-settle').__h = sh; }
+    setHTML($('#p-settle'), sh);
     let box = '';
     if (mine){
       const lines = plan.pays.filter(x => x.from === mine.name || x.to === mine.name)
@@ -4448,25 +4551,25 @@ function phoneRender(){
         <b class="${mine.net > 0 ? 'pos' : mine.net < 0 ? 'neg' : ''}">${mine.net > 0 ? '+' : mine.net < 0 ? '−' : ''}${moneyText(mine.net, plan.m)}</b>
         ${lines.length ? lines.map(l => `<p>${l}</p>`).join('') : '<p>You finished even. Nothing to pay.</p>'}</div>`;
     }
-    d.innerHTML = box + `<div class="btns one"><button class="btn b-raise" data-p="home">Leave</button></div>`;
+    setHTML(d, box + `<div class="btns one"><button class="btn b-raise" data-p="home">Leave</button></div>`);
     return;
   }
-  if (!p){ d.innerHTML = Pn.seated ? `<div class="btns one"><button class="btn b-fold" data-p="home">Back to start</button></div>` : ''; return; }
+  if (!p){ setHTML(d, Pn.seated ? `<div class="btns one"><button class="btn b-fold" data-p="home">Back to start</button></div>` : ''); return; }
   if (st.stage === 'betting' && p && !p.folded && !p.out){
     const actor = st.players[st.toAct];
     const head = myTurn ? (Pn.pending ? 'Sending…' : 'Your turn') : `${esc(actor.name)} to act`;
     const toCall = Math.max(0, st.currentBet - p.bet);
-    d.innerHTML = `<div class="actor"><div class="actor-name">${head}</div><div class="actor-meta">${myTurn ? (toCall ? `<b>${fmt(Math.min(toCall, p.stack))}</b> to call` : 'Nothing to call') : 'Buttons unlock on your turn'}</div></div>` +
-      (p.allIn ? '<p class="dock-note">You are all in. Sit back and watch.</p>' : actionButtons(st, me, 'phone', !myTurn || !!Pn.pending || !Pn.connected));
+    setHTML(d, `<div class="actor"><div class="actor-name">${head}</div><div class="actor-meta">${myTurn ? (toCall ? `<b>${fmt(Math.min(toCall, p.stack))}</b> to call` : 'Nothing to call') : 'Buttons unlock on your turn'}</div></div>` +
+      (p.allIn ? '<p class="dock-note">You are all in. Sit back and watch.</p>' : actionButtons(st, me, 'phone', !myTurn || !!Pn.pending || !Pn.connected)));
   } else {
     const canTop = buyLimits(st, p).max > 0, owed = owedOf(p);
     const msg = owed ? `You owe ${p.owe.map(o => `${esc(o.name)} ${fmt(o.amt)}`).join(' and ')} for the 7-2 bounty. Buy in to pay it and play on.` : st.stage === 'showdown' ? 'Showdown. The table device picks the winner.' : st.stage === 'betting' ? (p.out ? 'Out of chips this hand.' : p.last === 'Folded' ? 'You folded this hand.' : "You're dealt in from the next hand.") : st.stage === 'lobby' ? 'Waiting for the table to deal.' : 'Waiting for the next deal.';
-    d.innerHTML = `<div class="actor"><div class="actor-name">${st.stage === 'betting' || st.stage === 'showdown' ? 'Hand in progress' : 'Between hands'}</div><div class="actor-meta">${msg}</div></div>` +
-      (canTop ? `<div class="btns one"><button class="btn b-raise" data-p="topup"${p.topup ? ' disabled' : ''}>${p.topup ? `Buy-in of ${fmt(+p.topup || 0)} booked` : owed ? 'Buy in to pay' : 'Buy in'}</button></div>` : '');
+    setHTML(d, `<div class="actor"><div class="actor-name">${st.stage === 'betting' || st.stage === 'showdown' ? 'Hand in progress' : 'Between hands'}</div><div class="actor-meta">${msg}</div></div>` +
+      (canTop ? `<div class="btns one"><button class="btn b-raise" data-p="topup"${p.topup ? ' disabled' : ''}>${p.topup ? `Buy-in of ${fmt(+p.topup || 0)} booked` : owed ? 'Buy in to pay' : 'Buy in'}</button></div>` : ''));
     // Owing a bounty: bring up the buy-in sheet once, so it can't be missed.
     if (owed && !p.topup){
       const key = Pn.code + ':' + JSON.stringify(p.owe);
-      if (Pn.owePrompt !== key && $$('.sheet').every(x => x.hidden)){ Pn.owePrompt = key; openBuy(st, me, amt => phoneTopUp(amt)); }
+      if (Pn.owePrompt !== key && !sheetOpen()){ Pn.owePrompt = key; openBuy(st, me, amt => phoneTopUp(amt)); }
     }
   }
 }
@@ -4483,7 +4586,7 @@ function phoneSend(kind, to){
   const st = Pn.st, me = phoneSeat();
   if (!st || !Pn.connected || st.toAct !== me) return;
   Pn.pending = { seq: st.seq, kind };
-  const p = st.players[me], max = p.bet + p.stack;
+  const p = st.players[me], max = maxTo(st, me);
   const shown = (kind === 'call' && p.stack <= st.currentBet - p.bet) || (kind === 'raise' && to >= max) || kind === 'allin' ? 'allin'
     : kind === 'raise' ? (st.currentBet === 0 ? 'bet' : 'raise') : kind;
   Pn.ownPlayed = true;
@@ -4551,10 +4654,10 @@ function watchStart(code, b){
   Object.assign(Wt, { lastFx: null, lastV: 0, hostOn: true, tried: 0, wid: makeId(10) });
   store.set('hgc-watch-last', JSON.stringify({ code, b: b || 0 }));
   show('host');
-  $('#h-label').textContent = 'Table'; $('#h-code').textContent = code; $('#h-meta').innerHTML = ''; $('#h-meta').__h = '';
+  $('#h-label').textContent = 'Table'; $('#h-code').textContent = code; setHTML($('#h-meta'), '');
   $('#h-undo').hidden = true; $('#h-menu').hidden = true; $('#h-leave').hidden = false; $('#h-viewtag').hidden = false;
   $('#h-lobby').hidden = true; $('#h-felt').hidden = true; $('#h-seats').hidden = true;
-  $('#h-dock').innerHTML = '<div class="msg"><b>Connecting</b><span>Looking for the table…</span></div>';
+  setHTML($('#h-dock'), '<div class="msg"><b>Connecting</b><span>Looking for the table…</span></div>');
   keepAwake();
   watchConnect(H.broker);
 }
@@ -4569,7 +4672,7 @@ function watchConnect(idx){
   const probe = setTimeout(() => {
     if (Wt.client !== c || S) return;
     if (Wt.tried + 1 < BROKERS.length){ Wt.tried++; watchConnect(idx + 1); }
-    else $('#h-dock').innerHTML = '<div class="msg"><b>No table found</b><span>Check the code on the table device.</span></div><div class="btns"><button class="btn b-raise" data-h="home">Back to start</button></div>';
+    else setHTML($('#h-dock'), '<div class="msg"><b>No table found</b><span>Check the code on the table device.</span></div><div class="btns"><button class="btn b-raise" data-h="home">Back to start</button></div>');
   }, 7000);
   c.on('connect', () => {
     if (Wt.client !== c) return;
@@ -4799,9 +4902,22 @@ $('#hd-actions').addEventListener('click', e => {
 });
 
 /* ================= QR ================= */
+/* Drawn here rather than with the library's own SVG, so there is no white square: the card shows through,
+   the modules take the felt colour, and the three corner eyes are rounded like the card around them. */
 function qrSvg(text){
-  try { const q = qrcode(0, 'M'); q.addData(text); q.make(); return q.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); }
-  catch(e){ return `<p style="color:#1c130c;padding:20px">${esc(text)}</p>`; }
+  try {
+    const q = qrcode(0, 'M'); q.addData(text); q.make();
+    const n = q.getModuleCount(), m = 2, size = n + m * 2;          // 2 modules of quiet space inside the card's padding
+    const eyes = [[0, 0], [0, n - 7], [n - 7, 0]];
+    const inEye = (r, c) => eyes.some(([er, ec]) => r >= er && r < er + 7 && c >= ec && c < ec + 7);
+    let cells = '';
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c) && !inEye(r, c)) cells += `M${c + m} ${r + m}h1v1h-1z`;
+    const rr = (x, y, w, rad) => `M${x + rad} ${y}h${w - 2 * rad}a${rad} ${rad} 0 0 1 ${rad} ${rad}v${w - 2 * rad}a${rad} ${rad} 0 0 1 ${-rad} ${rad}h${-(w - 2 * rad)}a${rad} ${rad} 0 0 1 ${-rad} ${-rad}v${-(w - 2 * rad)}a${rad} ${rad} 0 0 1 ${rad} ${-rad}z`;
+    const eyePath = eyes.map(([er, ec]) => { const x = ec + m, y = er + m; return rr(x, y, 7, 2) + rr(x + 1, y + 1, 5, 1.3) + rr(x + 2, y + 2, 3, .9); }).join('');
+    return `<svg viewBox="0 0 ${size} ${size}" role="img" aria-label="QR code to join this table">
+      <path d="${cells}" fill="currentColor" shape-rendering="crispEdges"/>
+      <path d="${eyePath}" fill="currentColor" fill-rule="evenodd"/></svg>`;
+  } catch(e){ return `<p style="color:#1c130c;padding:20px">${esc(text)}</p>`; }
 }
 
 /* ================= wake lock ================= */
@@ -4826,7 +4942,8 @@ function goHome(){
   const wr = store.json('hgc-watch-last');
   if (wr && wr.code) list.push(`<div class="resume"><div><b>Keep watching</b><span>Code ${esc(wr.code)}</span></div><button class="btn b-raise" data-resume-watch="${esc(wr.code)}">Watch</button></div>`);
   $('#home-resume').innerHTML = list.join('');
-  const n = allTables().length;
+  // only the number is needed here, so count the saved tables without reading every one (each holds its whole hand history)
+  let n = 0; try { for (let k = 0; k < localStorage.length; k++) if ((localStorage.key(k) || '').indexOf('hgc-host:') === 0) n++; } catch(e){}
   $('#go-history').hidden = !n;
   $('#go-history-sub').textContent = `${n} table${n === 1 ? '' : 's'} run on this device. Results, settle-up and a spreadsheet download.`;
 }
