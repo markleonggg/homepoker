@@ -108,42 +108,93 @@ input{font:inherit}
 
 /* ---------- host (tablet) ---------- */
 .host{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:6px}
-.hbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-block:8px 0;flex-wrap:wrap}
+.hbar{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:12px;padding-block:10px 2px}
+.hbar .acts{justify-self:end}
 .hbar .title{display:flex;align-items:center;gap:10px;min-width:0}
-.hbar .title b{font-family:var(--display);font-weight:900;font-size:24px;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
-.hbar .codepill{font-family:var(--display);font-weight:800;font-size:18px;letter-spacing:.2em;padding:2px 10px;border-radius:8px;border:1px solid var(--line);color:var(--brass)}
-.hbar .meta{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.hbar .title b{font-family:var(--display);font-weight:900;font-size:26px;line-height:1;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.hbar .codepill{font-family:var(--display);font-weight:800;font-size:18px;line-height:1;letter-spacing:.2em;padding:7px 10px 6px 12px;border-radius:9px;border:1px solid var(--line);color:var(--brass)}
+.hbar .meta{display:flex;align-items:stretch;justify-self:center;border-radius:14px;background:rgba(0,0,0,.26);box-shadow:inset 0 0 0 1px var(--line);font-variant-numeric:tabular-nums}
+.hbar .meta:empty{display:none}
+.mstat{display:grid;justify-items:center;align-content:center;gap:3px;padding:6px 16px 7px;min-width:64px}
+.mstat+.mstat{box-shadow:inset 1px 0 0 var(--line)}
+.mstat small{font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);line-height:1;white-space:nowrap}
+.mstat b{font-family:var(--display);font-weight:800;font-size:22px;line-height:1;letter-spacing:.02em;color:var(--ivory);white-space:nowrap}
+.mstat b.gold{color:var(--brass)}
+.mstat b i{font-style:normal;color:var(--muted);font-weight:600;margin:0 1px}
+@media (max-width:900px){ .hbar{grid-template-columns:1fr auto} .hbar .meta{grid-column:1/-1;grid-row:2;justify-self:stretch;justify-content:space-around} .mstat{padding:6px 10px;min-width:0} }
 .hbar .acts{display:flex;gap:8px}
 .arena{position:relative;min-height:0}
-.felt{position:absolute;left:12%;right:12%;top:13%;bottom:13%;border-radius:50%/50%;border:10px solid var(--rail);
-  background:radial-gradient(70% 80% at 50% 35%,var(--felt-hi),var(--felt) 70%,var(--felt-deep));
-  box-shadow:inset 0 0 0 2px rgba(224,177,85,.35),inset 0 14px 34px rgba(0,0,0,.35),0 14px 36px rgba(0,0,0,.45);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:10px}
 .street{font-family:var(--display);font-weight:600;font-size:14px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted)}
 .pot{display:flex;align-items:baseline;gap:8px}
 .pot-label{font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
 .pot-num{font-family:var(--display);font-weight:900;font-size:clamp(36px,6vw,64px);line-height:1;color:var(--brass);font-variant-numeric:tabular-nums}
 .sidepots{font-size:13px;opacity:.85;font-variant-numeric:tabular-nums}
 .ticker{font-size:12.5px;color:var(--muted);max-width:90%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* ---- table: everything sized from --u (set from the space available) so text, chips and seats stay aligned ---- */
+.stage{position:absolute;inset:0;--u:9px}
+:root{--noise:linear-gradient(transparent,transparent)}
+.stage .rail,.stage .felt{position:absolute;left:50%;top:calc(50% + var(--dy,0px));border-radius:50%;transform:translate(-50%,-50%)}
+.stage .rail{width:var(--rw);height:var(--rh);
+  background:radial-gradient(60% 60% at 50% 38%,#3a2618 0%,#24170e 55%,#140c07 100%);
+  box-shadow:0 calc(var(--u)*1.6) calc(var(--u)*4) rgba(0,0,0,.6),inset 0 calc(var(--u)*.5) calc(var(--u)*.9) rgba(255,230,190,.14),inset 0 calc(var(--u)*-.6) calc(var(--u)*1.2) rgba(0,0,0,.55)}
+.stage .rail::before{content:"";position:absolute;inset:calc(var(--u)*1.35);border-radius:50%;border:max(1px,calc(var(--u)*.16)) dashed rgba(224,177,85,.3)}
+.stage .felt{width:var(--fw);height:var(--fh);overflow:hidden;
+  background:var(--noise),radial-gradient(70% 70% at 50% 42%,#21805f 0%,#166a4f 38%,#0e4c38 72%,#0a3628 100%);
+  box-shadow:0 0 0 calc(var(--u)*.55) #8a5a2e,0 0 0 calc(var(--u)*.8) #4a2d16,0 0 0 calc(var(--u)*.95) rgba(224,177,85,.35),inset 0 calc(var(--u)*1.2) calc(var(--u)*3.5) rgba(0,0,0,.45),inset 0 0 calc(var(--u)*6) rgba(0,0,0,.35)}
+.stage .logo{position:absolute;left:50%;top:50%;width:calc(var(--u)*31);height:calc(var(--u)*31);transform:translate(-50%,-50%);border-radius:50%;
+  display:grid;place-items:center;color:rgba(244,236,216,.06);pointer-events:none}
+.stage .logo b{font-size:calc(var(--u)*17);line-height:1;margin-top:calc(var(--u)*-3)}
+.stage .logo span{position:absolute;bottom:calc(var(--u)*2.6);font-family:var(--display);font-weight:800;font-size:calc(var(--u)*2.1);letter-spacing:.35em;text-indent:.35em;color:rgba(244,236,216,.1)}
+.stage .center{position:absolute;left:50%;top:calc(50% + var(--dy,0px));transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:calc(var(--u)*1);text-align:center;width:calc(var(--rx)*1.1);pointer-events:none}
+.stage .street{font-size:max(11px,calc(var(--u)*1.3))}
+.stage .pot{display:inline-flex;white-space:nowrap;align-items:center;gap:calc(var(--u)*.8);padding:calc(var(--u)*.5) calc(var(--u)*1.6) calc(var(--u)*.5) calc(var(--u)*.6);border-radius:999px;background:rgba(0,0,0,.38);box-shadow:inset 0 0 0 1px rgba(224,177,85,.25)}
+.stage .pot-chip{display:block;flex:none;width:calc(var(--u)*2.8);height:calc(var(--u)*2.8);background-size:100% 100%}
+.stage .pot-label{font-size:max(10px,calc(var(--u)*1.05));text-transform:uppercase;letter-spacing:.18em;align-self:center}
+.stage .pot-num{font-size:max(22px,calc(var(--u)*3.3))}
+.stage .board{gap:calc(var(--u)*.8)}
+.stage .slot{width:var(--cw);height:calc(var(--cw)*1.4);border-radius:calc(var(--cw)*.1);border:max(1px,calc(var(--u)*.16)) dashed rgba(244,236,216,.22);background:rgba(0,0,0,.08)}
+.stage .slot.dealt{border:calc(var(--cw)*.07) solid #f7f1e3;
+  background:repeating-linear-gradient(45deg,transparent 0 calc(var(--cw)*.09),rgba(255,255,255,.18) calc(var(--cw)*.09) calc(var(--cw)*.12)),repeating-linear-gradient(-45deg,transparent 0 calc(var(--cw)*.09),rgba(255,255,255,.18) calc(var(--cw)*.09) calc(var(--cw)*.12)),linear-gradient(160deg,#c9443a,#8f251d);
+  box-shadow:inset 0 0 0 calc(var(--cw)*.05) #8f251d,0 calc(var(--u)*.4) calc(var(--u)*.9) rgba(0,0,0,.45)}
+.stage .sidepots{min-height:1.4em;font-size:max(11px,calc(var(--u)*1.25));color:var(--ivory)}
+.stage .ticker{font-size:max(11px,calc(var(--u)*1.2));max-width:100%}
+/* bets on the felt */
+.bets{position:absolute;inset:0;pointer-events:none}
+.betspot{position:absolute;left:var(--x);top:var(--y);transform:translate(-50%,-50%);display:flex;align-items:center;gap:calc(var(--u)*.5)}
+.pile{position:relative;width:calc(var(--u)*2.6);height:calc(var(--u)*2.6 + var(--n)*var(--u)*.38)}
+.pile i{position:absolute;left:0;bottom:calc(var(--k)*var(--u)*.38);width:calc(var(--u)*2.6);height:calc(var(--u)*2.6);background-size:100% 100%;filter:drop-shadow(0 calc(var(--u)*.12) 0 rgba(0,0,0,.45))}
+.betspot b{font-weight:700;font-size:max(11px,calc(var(--u)*1.35));color:var(--ivory);background:rgba(0,0,0,.5);padding:calc(var(--u)*.15) calc(var(--u)*.7);border-radius:999px;font-variant-numeric:tabular-nums}
+.tdealer{position:absolute;left:var(--x);top:var(--y);width:calc(var(--u)*2.7);height:calc(var(--u)*2.7);margin:calc(var(--u)*-1.35) 0 0 calc(var(--u)*-1.35);border-radius:50%;
+  background:radial-gradient(circle at 40% 35%,#fffdf6,#e9e0cb 70%,#cfc3a6);color:var(--ink);display:grid;place-items:center;font-family:var(--display);font-weight:900;font-size:calc(var(--u)*1.5);
+  box-shadow:0 calc(var(--u)*.25) 0 #a99c80,0 calc(var(--u)*.45) calc(var(--u)*.6) rgba(0,0,0,.5);transition:left .6s cubic-bezier(.3,.7,.3,1),top .6s cubic-bezier(.3,.7,.3,1);pointer-events:none}
+/* seats around the rail */
 .hseats{position:absolute;inset:0;list-style:none;margin:0;padding:0}
-.hseat{position:absolute;left:var(--x);top:var(--y);transform:translate(-50%,-50%);width:clamp(128px,16.5vw,176px);padding:8px 10px;border-radius:14px;background:var(--seat);border:1.5px solid var(--line);
-  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 6px;align-items:center;transition:opacity .25s,border-color .2s,box-shadow .2s;cursor:pointer;text-align:left}
-.hseat .nm{display:flex;align-items:center;gap:6px;min-width:0;font-weight:700;font-size:15px}
+.hseat{position:absolute;left:var(--x);top:var(--y);transform:translate(-50%,-50%);width:var(--pw);display:flex;flex-direction:column;align-items:center;cursor:pointer;transition:opacity .25s;-webkit-tap-highlight-color:transparent}
+.hseat .av{position:relative;z-index:2;width:calc(var(--u)*6.6);height:calc(var(--u)*6.6);border-radius:50%;display:grid;place-items:center;text-shadow:0 1px 2px rgba(0,0,0,.35);
+  background:var(--c);background:radial-gradient(circle at 35% 30%,color-mix(in srgb,var(--c) 70%,#fff 30%),var(--c) 55%,color-mix(in srgb,var(--c) 60%,#000 40%));
+  color:#fff;font-family:var(--display);font-weight:800;font-size:calc(var(--u)*2.9);letter-spacing:.03em;
+  box-shadow:0 0 0 calc(var(--u)*.3) #0b1512,0 0 0 calc(var(--u)*.45) rgba(244,236,216,.25),0 calc(var(--u)*.5) calc(var(--u)*1.2) rgba(0,0,0,.55);transition:box-shadow .25s}
+.hseat .av.icon{font-size:0}
+.hseat .av .dot{position:absolute;right:calc(var(--u)*.2);bottom:calc(var(--u)*.2);width:calc(var(--u)*1.2);height:calc(var(--u)*1.2);box-shadow:0 0 0 calc(var(--u)*.25) #0b1512}
+.hseat .hole{position:absolute;z-index:1;left:50%;top:calc(var(--u)*-2.4);width:calc(var(--u)*6);height:calc(var(--u)*4.4);transform:translateX(-50%)}
+.hseat .hole i{position:absolute;top:0;width:calc(var(--u)*3.1);height:calc(var(--u)*4.3);border-radius:calc(var(--u)*.35);border:calc(var(--u)*.22) solid #f7f1e3;
+  background:repeating-linear-gradient(45deg,transparent 0 calc(var(--u)*.3),rgba(255,255,255,.2) calc(var(--u)*.3) calc(var(--u)*.4)),linear-gradient(160deg,#c9443a,#8f251d);box-shadow:0 calc(var(--u)*.2) calc(var(--u)*.5) rgba(0,0,0,.45)}
+.hseat .hole i:first-child{left:calc(var(--u)*.5);transform:rotate(-10deg)}
+.hseat .hole i:last-child{left:calc(var(--u)*2.4);transform:rotate(9deg)}
+.hseat .plate{position:relative;z-index:3;width:100%;margin-top:calc(var(--u)*-1.1);padding:calc(var(--u)*.55) calc(var(--u)*.9) calc(var(--u)*.6);border-radius:calc(var(--u)*1);
+  background:linear-gradient(180deg,#14211c,#070e0b);box-shadow:inset 0 0 0 1px rgba(244,236,216,.14),0 calc(var(--u)*.4) calc(var(--u)*1) rgba(0,0,0,.5);text-align:center;transition:box-shadow .25s}
+.hseat .nm{display:flex;align-items:center;justify-content:center;gap:calc(var(--u)*.5);min-width:0;font-weight:600;font-size:max(11px,calc(var(--u)*1.45));line-height:1.25}
 .hseat .nm span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.hseat .pos{display:flex;gap:4px;align-items:center}
-.hseat .stk{font-family:var(--display);font-weight:800;font-size:24px;line-height:1;font-variant-numeric:tabular-nums}
-.hseat .st{grid-column:1/-1;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
-.hseat .bet{grid-column:1/-1;display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;color:var(--brass);font-variant-numeric:tabular-nums;min-height:18px}
-.hseat.acting{border-color:var(--brass);box-shadow:0 0 0 3px rgba(224,177,85,.25),0 0 26px rgba(224,177,85,.35)}
+.hseat .nm em{font-style:normal;flex:none;font-size:max(8px,calc(var(--u)*.95));font-weight:800;letter-spacing:.06em;padding:0 calc(var(--u)*.4);border-radius:calc(var(--u)*.3);background:rgba(244,236,216,.12);color:var(--muted)}
+.hseat .stk{font-family:var(--display);font-weight:800;font-size:max(15px,calc(var(--u)*2.15));line-height:1.05;color:var(--brass);font-variant-numeric:tabular-nums}
+.hseat .st{margin-top:calc(var(--u)*.45);max-width:100%;font-size:max(10px,calc(var(--u)*1.2));color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+.hseat.acting .av{box-shadow:0 0 0 calc(var(--u)*.3) #0b1512,0 0 0 calc(var(--u)*.6) var(--brass),0 0 calc(var(--u)*2.6) rgba(224,177,85,.7)}
+.hseat.acting .plate{box-shadow:inset 0 0 0 calc(var(--u)*.15) var(--brass),0 0 calc(var(--u)*2) rgba(224,177,85,.35)}
 .hseat.acting .st{color:var(--brass);font-weight:700}
 .hseat.folded{opacity:.45}
-.hseat.out{opacity:.35}
+.hseat.out{opacity:.32}
 .hseat.allin .stk,.hseat.allin .st{color:var(--bad)}
-.hseat .won{color:var(--good);font-weight:700}
-.hseat .hole{position:relative;width:26px;height:20px}
-.hole i{position:absolute;top:0;width:14px;height:19px;border-radius:3px;border:1.5px solid var(--ivory);background:repeating-linear-gradient(45deg,var(--red-deep) 0 2px,var(--red) 2px 4px)}
-.hole i:first-child{left:0;transform:rotate(-8deg)}
-.hole i:last-child{left:10px;transform:rotate(7deg)}
+.hseat .st.won{color:var(--good);font-weight:700}
 .hdock{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-block:10px 12px;border-top:1px solid rgba(224,177,85,.28);flex-wrap:wrap}
 .hdock .msg{min-width:0;flex:1 1 260px}
 .hdock .msg b{display:block;font-family:var(--display);font-weight:800;font-size:24px;letter-spacing:.03em;text-transform:uppercase;line-height:1.1}
@@ -162,6 +213,42 @@ input{font:inherit}
 .hstats div{padding:12px 14px;border-radius:14px;background:rgba(0,0,0,.2);border:1px solid var(--line)}
 .hstats b{display:block;font-family:var(--display);font-weight:800;font-size:28px;line-height:1.1;font-variant-numeric:tabular-nums}
 .hstats span{font-size:12px;color:var(--muted)}
+.avd{--s:40px;flex:none;width:var(--s);height:var(--s);border-radius:50%;display:inline-grid;place-items:center;color:#f7f1e3;
+  background:var(--c);background:radial-gradient(circle at 35% 30%,color-mix(in srgb,var(--c) 72%,#fff 28%),var(--c) 55%,color-mix(in srgb,var(--c) 62%,#000 38%));
+  box-shadow:0 0 0 2px rgba(5,14,11,.9),0 0 0 3px rgba(244,236,216,.22)}
+.avd svg,.hseat .av svg{width:62%;height:62%;display:block;filter:drop-shadow(0 1px 1px rgba(0,0,0,.35))}
+.avpick{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px 6px}
+.avopt{display:grid;justify-items:center;gap:4px;padding:6px 2px;border:0;border-radius:14px;background:transparent}
+.avopt .avd{--s:52px;transition:transform .12s,box-shadow .15s}
+.avopt small{font-size:11.5px;font-weight:600;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.avopt.on .avd{box-shadow:0 0 0 2px rgba(5,14,11,.9),0 0 0 4.5px var(--brass),0 0 18px rgba(224,177,85,.5);transform:scale(1.06)}
+.avopt.on small{color:var(--brass)}
+.avopt:disabled{opacity:.28}
+.avopt:disabled small{text-decoration:line-through}
+.rate{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rate .txt{width:96px;text-align:center}
+.rate span{color:var(--muted);font-weight:600}
+.rate b{font-family:var(--display);font-weight:800;font-size:24px}
+.pays{display:grid;row-gap:8px;column-gap:10px;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) auto}
+.pay{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) minmax(5.5em,auto);align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:rgba(0,0,0,.22);box-shadow:inset 0 0 0 1px var(--line)}
+.pay .who{display:flex;align-items:center;gap:8px;min-width:0;font-weight:700}
+.pay .who span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.pay .arrow{color:var(--muted);font-size:13px;font-weight:600;white-space:nowrap}
+@supports (grid-template-columns:subgrid){.pay{grid-template-columns:subgrid}}
+.pay .amt{text-align:right;font-family:var(--display);font-weight:800;font-size:24px;color:var(--brass);white-space:nowrap;font-variant-numeric:tabular-nums}
+.pay.even{display:block;color:var(--muted);font-weight:600;text-align:center}
+.psettle{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 0 8px}
+.psettle .lbl{display:block;margin:0 0 8px}
+.psettle .pay{gap:8px;padding:10px 12px;font-size:15px}
+.psettle .pay .amt{font-size:20px}
+.psettle .pay .arrow{font-size:15px}
+.psettle .hint{margin:8px 0 0}
+.pay.mypay{background:rgba(224,177,85,.1);box-shadow:inset 0 0 0 1.5px var(--brass)}
+.mine-pay{display:grid;gap:6px;padding:12px 14px;border-radius:14px;background:rgba(0,0,0,.22);box-shadow:inset 0 0 0 1px var(--line)}
+.mine-pay b{font-family:var(--display);font-weight:800;font-size:28px;line-height:1}
+.mine-pay .pos{color:var(--good)} .mine-pay .neg{color:var(--bad)}
+.mine-pay p{margin:0;font-size:14px}
 .viewer-tag{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:2px 8px}
 .lobby{position:absolute;inset:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:center;padding:12px 0;overflow-y:auto}
 .qrbox{background:var(--ivory);border-radius:18px;padding:14px;width:min(100%,300px);justify-self:center;box-shadow:0 10px 30px rgba(0,0,0,.4)}
@@ -170,14 +257,10 @@ input{font:inherit}
 .joininfo .big{font-family:var(--display);font-weight:900;font-size:clamp(44px,7vw,76px);letter-spacing:.18em;color:var(--brass);line-height:1}
 .joininfo .url{font-size:13px;color:var(--muted);word-break:break-all}
 .plist{display:flex;flex-wrap:wrap;gap:8px}
-.plist span{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:rgba(0,0,0,.25);border:1px solid var(--line);font-weight:600}
+.plist span{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:rgba(0,0,0,.25);border:1px solid var(--line);font-weight:600}
 .plist .empty{color:var(--muted);font-weight:500;border-style:dashed}
 @media (max-width:700px){
   .lobby{grid-template-columns:1fr}
-  .felt{position:relative;left:auto;right:auto;top:auto;bottom:auto;margin:6px 0 10px;min-height:150px;border-width:7px}
-  .arena{overflow-y:auto}
-  .hseats{position:static;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding-bottom:8px}
-  .hseat{position:relative;left:auto;top:auto;transform:none;width:auto}
 }
 
 /* ---------- player (phone) ---------- */
@@ -198,11 +281,14 @@ input{font:inherit}
 .strip .street{font-size:12px}
 .strip .pot-num{font-size:30px}
 .plist2{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;list-style:none;margin:0;padding:2px 0 8px;display:flex;flex-direction:column;gap:2px}
-.prow{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 10px;border-radius:12px;border:1.5px solid transparent}
-.prow .pos{display:flex;flex-direction:column;align-items:center;gap:2px}
+.prow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 10px;border-radius:12px;border:1.5px solid transparent}
+.prow .ptags{display:inline-flex;align-items:center;gap:4px;flex:none}
+.prow .ptags:empty{display:none}
+.prow .ptags .dbtn{width:18px;height:18px;font-size:11px;box-shadow:0 1px 3px rgba(0,0,0,.5)}
+.prow .ptags .tag{display:inline-flex;align-items:center;height:18px;padding:0 5px;font-size:10px;line-height:1}
 .prow .nm{display:flex;align-items:center;gap:6px;font-weight:600;min-width:0}
 .prow .nm span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.prow .st{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow .st{padding-left:28px;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .prow .money{text-align:right;line-height:1.1;font-variant-numeric:tabular-nums}
 .prow .money b{font-family:var(--display);font-weight:800;font-size:20px}
 .prow .money span{display:flex;align-items:center;justify-content:flex-end;gap:4px;font-size:12px;font-weight:700;color:var(--brass)}
@@ -333,8 +419,9 @@ input[type=range]{width:100%;height:36px;accent-color:var(--brass);background:tr
   <div class="scroll">
     <button class="ghost back" data-nav="history">Back</button>
     <div class="formhead"><h2 id="hd-title">Table</h2><p id="hd-sub"></p></div>
+    <div><span class="lbl" id="hd-paylbl">Who pays who</span><div class="pays" id="hd-pays"></div><p class="hint" id="hd-rate"></p></div>
     <div class="hstats" id="hd-stats"></div>
-    <div><span class="lbl">Settle up</span><div class="tbl-wrap"><table class="settle" id="hd-table"></table></div></div>
+    <div><span class="lbl">Results</span><div class="tbl-wrap"><table class="settle" id="hd-table"></table></div></div>
     <div><span class="lbl">Recent hands</span><div class="tbl-wrap"><table class="settle" id="hd-hands"></table></div></div>
     <div id="hd-actions" style="display:grid;gap:10px"></div>
   </div>
@@ -370,9 +457,12 @@ input[type=range]{width:100%;height:36px;accent-color:var(--brass);background:tr
       <label><span class="lbl" id="c-bb-lbl">Big blind</span><input class="txt" id="c-bb" inputmode="numeric" value="10"></label>
     </div>
     <div class="grid3">
-      <label><span class="lbl">7-2 bounty</span><input class="txt" id="c-bounty" inputmode="numeric" value="30"></label>
-      <p class="hint" style="grid-column:span 2;align-self:end;margin:0 0 4px">Win a hand holding 7-2 and every other player dealt in pays you this. Set 0 to turn it off.</p>
+      <label><span class="lbl">7-2 offsuit bounty</span><input class="txt" id="c-bounty" inputmode="numeric" value="30"></label>
+      <p class="hint" style="grid-column:span 2;align-self:end;margin:0 0 4px">Win a hand holding 7-2 offsuit (different suits) and every other player dealt in pays you this. Set 0 to turn it off.</p>
     </div>
+    <div><span class="lbl">Chip value</span>
+      <div class="rate"><input class="txt" id="c-rate" inputmode="numeric" value="10" aria-label="Chips"><span>chips =</span><b>1</b><input class="txt" id="c-cur" maxlength="5" value="HKD" autocapitalize="characters" aria-label="Currency"></div>
+      <p class="hint">Used to work out who pays who when the table closes.</p></div>
     <p class="hint" id="c-blindhint"></p>
     <p class="err" id="c-err" role="alert"></p>
     <button class="cta" id="c-open">Open table</button>
@@ -388,6 +478,7 @@ input[type=range]{width:100%;height:36px;accent-color:var(--brass);background:tr
     <div class="formhead"><h2>Join a table</h2><p>The code is on the table device.</p></div>
     <label><span class="lbl">Table code</span><input class="txt code" id="j-code" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABC123"></label>
     <label><span class="lbl">Your name</span><input class="txt" id="j-name" maxlength="14" autocomplete="nickname" placeholder="Name on the table"></label>
+    <div><span class="lbl">Pick your avatar</span><div class="avpick" id="j-av"></div></div>
     <p class="err" id="j-err" role="alert"></p>
     <button class="cta" id="j-go">Take a seat</button>
   </div>
@@ -415,14 +506,20 @@ input[type=range]{width:100%;height:36px;accent-color:var(--brass);background:tr
           <div><span class="lbl" id="h-seatcount">Players</span><div class="plist" id="h-plist"></div></div>
         </div>
       </div>
-      <div class="felt" id="h-felt">
-        <div class="street" id="h-street">Pre-flop</div>
-        <div class="board" id="h-board" aria-hidden="true"></div>
-        <div class="pot"><span class="pot-label">Pot</span><span class="pot-num" id="h-pot">0</span></div>
-        <div class="sidepots" id="h-side"></div>
-        <div class="ticker" id="h-ticker"></div>
+      <div class="stage" id="h-felt">
+        <div class="rail"></div>
+        <div class="felt"><div class="logo" aria-hidden="true"><b>♠</b><span>HOME GAME</span></div></div>
+        <div class="center">
+          <div class="street" id="h-street">Pre-flop</div>
+          <div class="pot"><i class="pot-chip" id="h-potchip"></i><span class="pot-label">Pot</span><span class="pot-num" id="h-pot">0</span></div>
+          <div class="board" id="h-board" aria-hidden="true"></div>
+          <div class="sidepots" id="h-side"></div>
+          <div class="ticker" id="h-ticker" hidden></div>
+        </div>
+        <div class="bets" id="h-bets"></div>
+        <div class="tdealer" id="h-dbtn" hidden>D</div>
+        <ul class="hseats" id="h-seats"></ul>
       </div>
-      <ul class="hseats" id="h-seats"></ul>
     </div>
     <div class="hdock" id="h-dock"></div>
   </div>
@@ -436,15 +533,16 @@ input[type=range]{width:100%;height:36px;accent-color:var(--brass);background:tr
       <div style="display:flex;gap:8px"><button class="ghost" id="p-leave">Leave</button><button class="ghost" id="p-menu">Menu</button></div>
     </div>
     <div class="me" id="p-me">
-      <div class="who"><b id="p-name">You</b></div>
+      <div class="who"><span id="p-av"></span><b id="p-name">You</b></div>
       <div class="stk"><span id="p-stack">0</span><small id="p-bet"></small></div>
       <div class="st" id="p-status">Connecting…</div>
     </div>
-    <div class="strip">
+    <div class="strip" id="p-strip">
       <div><div class="street" id="p-street">Waiting</div><div class="board" id="p-board" aria-hidden="true"></div></div>
       <div class="pot"><span class="pot-label">Pot</span><span class="pot-num" id="p-pot">0</span></div>
     </div>
     <ul class="plist2" id="p-list"></ul>
+    <div class="psettle" id="p-settle" hidden></div>
     <div class="dock" id="p-dock"></div>
   </div>
 </section>
@@ -2856,9 +2954,17 @@ async function tagOf(pid){
 }
 function cleanName(s){ return String(s || '').replace(/[\u0000-\u001f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 14); }
 let toastT = 0;
-function toast(msg){ const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 2600); }
+function placeToast(){
+  const t = $('#toast'); if (!t || t.hidden) return;
+  const v = $$('.view').find(x => !x.hidden), dk = v && [...v.querySelectorAll('.dock,.hdock')].find(x => x.getClientRects().length);
+  let b = 120; if (dk){ const r = dk.getBoundingClientRect(); if (r.height) b = Math.max(16, innerHeight - r.top + 12); }
+  t.style.bottom = b + 'px';
+}
+if (typeof ResizeObserver !== 'undefined') addEventListener('DOMContentLoaded', () => { const ro = new ResizeObserver(placeToast); $$('.dock,.hdock').forEach(d => ro.observe(d)); });
+addEventListener('resize', placeToast);
+function toast(msg){ const t = $('#toast'); t.textContent = msg; t.hidden = false; placeToast(); clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 2600); }
 function banner(msg){ const b = $('#banner'); b.textContent = msg || ''; b.hidden = !msg; }
-function show(view){ $$('.view').forEach(v => { v.hidden = v.id !== 'v-' + view; }); closeSheets(); }
+function show(view){ $$('.view').forEach(v => { v.hidden = v.id !== 'v-' + view; }); closeSheets(); if (view !== 'join' && typeof peekStop === 'function') peekStop(); }
 
 /* ================= sound ================= */
 const Snd = {
@@ -2941,6 +3047,16 @@ const CHIP_IMG = (() => {
     });
   } catch(e){}
   return out;
+})();
+/* A faint woven texture for the felt, drawn once. */
+(() => {
+  try {
+    const c = document.createElement('canvas'), z = 140; c.width = c.height = z;
+    const g = c.getContext('2d'), img = g.createImageData(z, z);
+    for (let k = 0; k < img.data.length; k += 4){ const v = Math.random() < .5 ? 0 : 255; img.data[k] = img.data[k + 1] = img.data[k + 2] = v; img.data[k + 3] = Math.random() * 16; }
+    g.putImageData(img, 0, 0);
+    document.documentElement.style.setProperty('--noise', `url(${c.toDataURL()})`);
+  } catch(e){}
 })();
 function chipAt(x, y, k){
   const c = document.createElement('i'); c.className = 'fchip';
@@ -3054,8 +3170,8 @@ const live = (st, i) => (st.stage === 'betting' || st.stage === 'showdown') && !
 function nextSeat(i, pred){ const n = S.players.length; for (let k = 1; k <= n; k++){ const j = ((i + k) % n + n) % n; if (pred(S.players[j])) return j; } return -1; }
 function put(p, amt){ amt = Math.max(0, Math.min(amt, p.stack)); p.stack -= amt; p.bet += amt; p.committed += amt; if (p.stack === 0) p.allIn = true; return amt; }
 function log(text){ S.log.push(text); if (S.log.length > 30) S.log.shift(); }
-function newPlayer(name, pid, tag){
-  return { name, pid, tag, stack: S.startStack, bought: S.startStack, bet: 0, committed: 0, folded: true, allIn: false, acted: false, locked: false, out: false, last: S.hand ? 'Dealt in next hand' : '', topup: false, leaving: false };
+function newPlayer(name, pid, tag, av){
+  return { name, pid, tag, av: freeAvatar(S, av), stack: S.startStack, bought: S.startStack, bet: 0, committed: 0, folded: true, allIn: false, acted: false, locked: false, out: false, last: S.hand ? 'Dealt in next hand' : '', topup: false, leaving: false };
 }
 
 function applyTopUps(){
@@ -3248,6 +3364,7 @@ function hostCreate(){
   const err = $('#c-err');
   const max = +$('#c-max').textContent, stack = toInt($('#c-stack').value, 0), bb = toInt($('#c-bb').value, 0);
   const sb = max < 4 ? Math.max(1, Math.min(toInt($('#c-sb').value, 1), bb || 1)) : toInt($('#c-sb').value, 0);
+  const money = { chips: toInt($('#c-rate').value, 10), cur: (String($('#c-cur').value).toUpperCase().replace(/[^A-Z$€£¥]/g, '').slice(0, 5) || 'HKD') };
   const bountyRaw = String($('#c-bounty').value).trim(), bounty = bountyRaw === '' ? 0 : (parseInt(bountyRaw.replace(/[^\d]/g, ''), 10) || 0);
   if (!stack || !sb || !bb){ err.textContent = max < 4 ? 'Enter the stack and the blind as whole numbers.' : 'Enter the stack and both blinds as whole numbers.'; return; }
   if (bb < sb){ err.textContent = 'The big blind must be at least the small blind.'; return; }
@@ -3258,13 +3375,14 @@ function hostCreate(){
   const code = makeId(6);
   S = { table: { code, label: `Table ${count}`, max, created: Date.now() }, players: [], gone: [], startStack: stack, sb, bb, handSB: sb, handBB: bb,
         dealer: -1, sbIdx: -1, bbIdx: -1, street: 0, currentBet: 0, minRaise: bb, toAct: -1, hand: 0, stage: 'lobby', result: '', resultSub: '',
-        pots: null, runout: false, seq: 0, fx: null, log: [], closed: false, bounty, lastDealt: [], lastWin: [], bountyHand: 0 };
+        pots: null, runout: false, seq: 0, fx: null, log: [], closed: false, bounty, lastDealt: [], lastWin: [], bountyHand: 0, money };
   Object.assign(H, { code, pubN: 0, fxN: 0, hist: [], online: {}, broker: 0, last: { v: 0 } });
   log(`${S.table.label} opened`);
   hostSave();
   hostStart(0);
 }
 function hostResume(code){
+  { const r0 = store.json(hostKey(code)); if (r0 && r0.S) { ensureAvatars(r0.S); store.set(hostKey(code), JSON.stringify(r0)); } }
   AD.paused = true; clearInterval(AD.timer); AD.timer = 0; AD.at = 0;
   const rec = store.json(hostKey(code)); if (!rec || !rec.S) return false;
   S = rec.S;
@@ -3336,7 +3454,7 @@ async function hostCmd(m){
   if (S.closed){ hostReply(tag, { type: 'error', msg: 'This table is closed.' }); return; }
   switch (m.type){
     case 'hello': hostPublish(); break;
-    case 'join': return hostJoin(m.pid, tag, m.name);
+    case 'join': return hostJoin(m.pid, tag, m.name, Number(m.av));
     case 'act': {
       if (i < 0) return hostReply(tag, { type: 'error', msg: 'You are not seated at this table.' });
       if (S.stage !== 'betting' || S.toAct !== i) return hostReply(tag, { type: 'error', msg: "It's not your turn." });
@@ -3349,10 +3467,18 @@ async function hostCmd(m){
     }
     case 'topup': if (i >= 0) hostTopUp(i, tag); break;
     case 'leave': if (i >= 0) hostLeave(i, tag); break;
+    case 'avatar': {
+      if (i < 0) return;
+      const v = Number(m.av);
+      if (!avOk(v)) return;
+      if (S.players.some((q, k) => k !== i && q.av === v)) return hostReply(tag, { type: 'error', msg: `${AVATARS[v].name} is taken. Pick another.` });
+      if (P(i).av !== v){ P(i).av = v; commit(null, { seq: false }); }
+      break;
+    }
   }
 }
 function refreshOver(){ if (S.stage === 'over' && funded() >= 2){ S.stage = 'done'; AD.paused = false; setTimeout(() => autoDeal(true), 0); } }
-function hostJoin(pid, tag, raw){
+function hostJoin(pid, tag, raw, want){
   const name = cleanName(raw);
   if (!name) return hostReply(tag, { type: 'error', msg: 'Enter your name.' });
   const i = S.players.findIndex(p => p.pid === pid);
@@ -3367,11 +3493,13 @@ function hostJoin(pid, tag, raw){
     return hostReply(tag, { type: 'joined', name: p.name });
   }
   if (S.players.length >= S.table.max) return hostReply(tag, { type: 'error', msg: `${S.table.label} is full (${S.table.max} players).` });
-  S.players.push(newPlayer(name, pid, tag));
+  const np = newPlayer(name, pid, tag, avOk(want) ? want : -1);
+  S.players.push(np);
   log(`${name} sat down${S.hand ? ', dealt in next hand' : ''}`);
   refreshOver();
   commit({ kind: 'join', tag }, { seq: false });
   hostReply(tag, { type: 'joined', name });
+  if (avOk(want) && np.av !== want) hostReply(tag, { type: 'info', msg: `${AVATARS[want].name} was taken, so you're ${AVATARS[np.av].name}. Change it from Menu.` });
 }
 function hostTopUp(i, tag){
   const p = P(i);
@@ -3411,7 +3539,7 @@ function hostAct(i, kind, to, opts = {}){
   commit({ kind: r.fx, tag, name, moved: r.moved, after: r.after }, { foldRect });
   if (S.stage === 'done'){ AD.paused = false; autoDeal(true); }
 }
-/* 7-2 bounty: the winner showed 7-2, so every other player dealt into that hand pays the bounty (or what they have left). */
+/* 7-2 offsuit bounty: the winner showed 7-2 of different suits, so every other player dealt into that hand pays the bounty (or what they have left). */
 function hostBounty(tag){
   if (!S || S.stage !== 'done' || !S.bounty || S.bountyHand === S.hand || !(S.lastWin || []).includes(tag)) return;
   const w = S.players.find(p => p.tag === tag); if (!w) return;
@@ -3424,9 +3552,9 @@ function hostBounty(tag){
   });
   w.stack += total; S.bountyHand = S.hand;
   w.last = (/^Won/.test(w.last || '') ? w.last + ' · ' : '') + `7-2 +${fmt(total)}`;
-  S.result = (S.result ? S.result + ' · ' : '') + `7-2 bounty ${w.name} +${fmt(total)}`;
+  S.result = (S.result ? S.result + ' · ' : '') + `7-2 offsuit bounty ${w.name} +${fmt(total)}`;
   const h = S.hands && S.hands[S.hands.length - 1]; if (h && h.n === S.hand) h.bounty = [w.name, total];
-  log(`${w.name} shows 7-2 and collects ${fmt(total)}`);
+  log(`${w.name} shows 7-2 offsuit and collects ${fmt(total)}`);
   if (funded() < 2) S.stage = 'over';
   commit({ kind: 'bounty', tag, name: w.name, amount: total, payers }, { seq: false });
   autoDeal(true);
@@ -3475,6 +3603,7 @@ function hostUndo(){
   });
   prev.seq = Math.max(prev.seq, cur.seq) + 1;
   S = prev; H.last.v = 99;
+  ensureAvatars(S);
   AD.paused = true; clearInterval(AD.timer); AD.timer = 0; AD.at = 0;
   closeSheets();
   commit({ kind: 'undo' }, { seq: false });
@@ -3482,10 +3611,12 @@ function hostUndo(){
 }
 function hostClose(){
   S.closed = true; S.table.closedAt = Date.now(); log('Table closed');
+  S.result = ''; S.fx = null; S.players.forEach(p => { p.last = ''; });
   commit(null, { seq: false });
   try { H.client.publish(topic(H.code, 'host'), '0', { qos: 1, retain: true }); } catch(e){}
   store.del('hgc-host-last');
-  setTimeout(() => { try { H.client.end(); } catch(e){} H.client = null; S = null; goHome(); }, 400);
+  const code = H.code;
+  setTimeout(() => { try { H.client.end(); } catch(e){} H.client = null; S = null; renderHistDetail(code); }, 400);
 }
 
 /* ---- host rendering ---- */
@@ -3525,21 +3656,30 @@ function hostRender(){
   if (!S) return;
   $('#h-label').textContent = S.table.label;
   $('#h-code').textContent = H.code;
-  $('#h-meta').textContent = `${S.hand ? 'Hand ' + S.hand + ' · ' : ''}${funded() < 4 ? `Blind ${fmt(S.bb)}` : `Blinds ${fmt(S.sb)}/${fmt(S.bb)}`}${S.bounty ? ' · 7-2 bounty ' + fmt(S.bounty) : ''} · ${S.players.length}/${S.table.max} seats`;
+  const stat = (label, val, cls = '') => `<span class="mstat"><small>${label}</small><b${cls ? ` class="${cls}"` : ''}>${val}</b></span>`;
+  const metaHTML = [
+    stat('Hand', S.hand ? fmt(S.hand) : '–'),
+    funded() < 4 ? stat('Blind', fmt(S.bb), 'gold') : stat('Blinds', `${fmt(S.sb)}<i>/</i>${fmt(S.bb)}`, 'gold'),
+    stat('Seats', `${S.players.length}<i>/</i>${S.table.max}`),
+  ].join('');
+  if ($('#h-meta').__h !== metaHTML){ $('#h-meta').innerHTML = metaHTML; $('#h-meta').__h = metaHTML; }
   $('#h-undo').disabled = !H.hist.length;
   $('#h-undo').hidden = VIEW; $('#h-menu').hidden = VIEW; $('#h-leave').hidden = !VIEW; $('#h-viewtag').hidden = !VIEW;
   const lobby = S.stage === 'lobby';
+  const wasHidden = $('#h-felt').hidden;
   $('#h-lobby').hidden = !lobby; $('#h-felt').hidden = lobby; $('#h-seats').hidden = lobby;
+  if (wasHidden && !lobby){ TG.W = 0; }
   if (lobby){
     $('#h-bigcode').textContent = H.code;
     $('#h-url').textContent = joinUrl();
     if ($('#h-qr').dataset.code !== H.code){ $('#h-qr').innerHTML = qrSvg(joinUrl()); $('#h-qr').dataset.code = H.code; }
     $('#h-seatcount').textContent = `Players ${S.players.length}/${S.table.max}`;
     $('#h-url').textContent = (S.table.movedFrom ? `Moved from ${S.table.movedFrom}. Everyone rejoins here with the same name to get their chips back. ` : '') + joinUrl();
-    $('#h-plist').innerHTML = S.players.length ? S.players.map(p => `<span><i class="dot ${isOn(p) ? 'on' : ''}"></i>${esc(p.name)}</span>`).join('') : '<span class="empty">Nobody yet. Scan the code with a phone camera.</span>';
+    $('#h-plist').innerHTML = S.players.length ? S.players.map(p => `<span>${avDisc(p.av, 26)}${esc(p.name)}<i class="dot ${isOn(p) ? 'on' : ''}"></i></span>`).join('') : '<span class="empty">Nobody yet. Scan the code with a phone camera.</span>';
   } else {
     $('#h-street').textContent = S.closed ? 'Table closed' : S.stage === 'betting' ? STREETS[S.street] : S.stage === 'showdown' ? 'Showdown' : S.stage === 'over' ? 'Game paused' : 'Hand complete';
     $('#h-board').innerHTML = boardHTML(S, H.last);
+    const pc = $('#h-potchip'); if (pc && !pc.style.backgroundImage && CHIP_IMG[0]) pc.style.backgroundImage = CHIP_IMG[0];
     $('#h-pot').textContent = fmt(potTotal());
     $('#h-side').textContent = sidePotText(S);
     $('#h-ticker').textContent = S.log.slice(-1)[0] || '';
@@ -3547,31 +3687,129 @@ function hostRender(){
   }
   hostRenderDock();
 }
+/* ---- avatars: ten poker-themed icons, one per player per table ---- */
+const AVATARS = [
+  { name: 'Heart', c: '#2f6fb5', svg: '<path d="M12 20.6C6.4 16.6 2.8 13.3 2.8 9.2 2.8 6.4 4.9 4.3 7.5 4.3c1.9 0 3.5 1.1 4.5 2.7 1-1.6 2.6-2.7 4.5-2.7 2.6 0 4.7 2.1 4.7 4.9 0 4.1-3.6 7.4-9.2 11.4z" fill="currentColor"/><path d="M6.6 8.4c.3-1 1.1-1.7 2.1-1.8" fill="none" stroke="rgba(0,0,0,.3)" stroke-width="1.3" stroke-linecap="round"/>' },
+  { name: 'Diamond', c: '#c8742c', svg: '<path d="M7 4.2h10l4.2 5.2L12 20.4 2.8 9.4z" fill="currentColor"/><path d="M2.8 9.4h18.4M9.6 4.2L8 9.4l4 11 4-11-1.6-5.2" fill="none" stroke="rgba(0,0,0,.38)" stroke-width="1.1" stroke-linejoin="round"/>' },
+  { name: 'Club', c: '#2f8a8f', svg: '<g fill="currentColor"><circle cx="12" cy="7.4" r="3.9"/><circle cx="7.3" cy="12.9" r="3.9"/><circle cx="16.7" cy="12.9" r="3.9"/><circle cx="12" cy="12" r="2.6"/><path d="M12 12.4c.3 3.4 1.2 6 2.9 8.2H9.1c1.7-2.2 2.6-4.8 2.9-8.2z"/></g>' },
+  { name: 'Crown', c: '#a8841f', svg: '<path d="M3 8.2l4.6 3.6L12 5l4.4 6.8L21 8.2l-1.8 8.7H4.8z" fill="currentColor"/><rect x="4.8" y="18" width="14.4" height="2.4" rx=".9" fill="currentColor"/><circle cx="12" cy="13.4" r="1.3" fill="rgba(0,0,0,.4)"/>' },
+  { name: 'Cowboy', c: '#8a5a2e', svg: '<path d="M7.7 13.6c-.2-3.6.9-7.4 2.6-7.4.8 0 1 .8 1.7.8s.9-.8 1.7-.8c1.7 0 2.8 3.8 2.6 7.4z" fill="currentColor"/><path d="M2.2 12.4c2.3 3 5.8 4.6 9.8 4.6s7.5-1.6 9.8-4.6c-2.7 1.4-6 2-9.8 2s-7.1-.6-9.8-2z" fill="currentColor"/><path d="M7.9 12.2c2.6.7 5.6.7 8.2 0" fill="none" stroke="rgba(0,0,0,.4)" stroke-width="1.2"/>' },
+  { name: 'Rocket', c: '#b03a48', svg: '<path d="M12 2.4c3 2.2 4.6 5.7 4.6 9.7v4.5H7.4v-4.5c0-4 1.6-7.5 4.6-9.7z" fill="currentColor"/><circle cx="12" cy="10" r="1.9" fill="rgba(0,0,0,.45)"/><path d="M7.4 12.4L4.4 16v3.3l3-1.9zM16.6 12.4l3 3.6v3.3l-3-1.9z" fill="currentColor"/><path d="M10 18.4h4l-.9 3.2h-2.2z" fill="currentColor" opacity=".7"/>' },
+  { name: 'Poker face', c: '#5a5fb0', svg: '<path d="M2.4 9.3h19.2v1.7l-1 .6c-.3 3.1-2.2 4.9-4.7 4.9-2.4 0-4-1.7-4.6-4.6h-.6c-.6 2.9-2.2 4.6-4.6 4.6-2.5 0-4.4-1.8-4.7-4.9l-1-.6z" fill="currentColor"/><path d="M5.2 11.4l1.6-.9M15.4 11.4l1.6-.9" stroke="rgba(0,0,0,.35)" stroke-width="1.2" stroke-linecap="round"/>' },
+  { name: 'Ace', c: '#2c8a57', svg: '<rect x="5" y="2.6" width="14" height="18.8" rx="2.2" fill="currentColor"/><path d="M12 6.8c-1.9 2.4-4.1 3.7-4.1 5.8 0 1.4 1 2.4 2.3 2.4.6 0 1.1-.2 1.4-.6l-.6 2.7h2l-.6-2.7c.3.4.8.6 1.4.6 1.3 0 2.3-1 2.3-2.4 0-2.1-2.2-3.4-4.1-5.8z" fill="rgba(0,0,0,.62)"/>' },
+  { name: 'Dice', c: '#7b4b94', svg: '<rect x="11.2" y="3.4" width="9.6" height="9.6" rx="2" transform="rotate(14 16 8.2)" fill="currentColor" opacity=".8"/><rect x="3" y="8.2" width="11.6" height="11.6" rx="2.3" fill="currentColor"/><g fill="rgba(0,0,0,.55)"><circle cx="6.1" cy="11.3" r="1.15"/><circle cx="8.8" cy="14" r="1.15"/><circle cx="11.5" cy="16.7" r="1.15"/></g>' },
+  { name: 'Chip', c: '#a3477e', svg: '<circle cx="12" cy="12" r="9.2" fill="currentColor"/><circle cx="12" cy="12" r="5.6" fill="none" stroke="rgba(0,0,0,.42)" stroke-width="1.5"/><g fill="rgba(0,0,0,.42)"><rect x="10.9" y="2.8" width="2.2" height="3.3" rx=".6"/><rect x="10.9" y="17.9" width="2.2" height="3.3" rx=".6"/><rect x="2.8" y="10.9" width="3.3" height="2.2" rx=".6"/><rect x="17.9" y="10.9" width="3.3" height="2.2" rx=".6"/></g>' },
+];
+const avOk = v => Number.isInteger(v) && v >= 0 && v < AVATARS.length;
+const avSvg = v => `<svg viewBox="0 0 24 24" aria-hidden="true">${AVATARS[v].svg}</svg>`;
+function avDisc(v, size, extra = ''){ return avOk(v) ? `<span class="avd" style="--s:${size}px;--c:${AVATARS[v].c}" title="${AVATARS[v].name}"${extra}>${avSvg(v)}</span>` : ''; }
+function freeAvatar(st, want, except){
+  const used = new Set(st.players.filter(p => p !== except && avOk(p.av)).map(p => p.av));
+  if (avOk(want) && !used.has(want)) return want;
+  for (let k = 0; k < AVATARS.length; k++) if (!used.has(k)) return k;
+  return 0;
+}
+/* Every seat ends up with a valid avatar and no two seats share one. */
+function ensureAvatars(st){
+  const seen = new Set(); let changed = false;
+  st.players.forEach(p => { if (!avOk(p.av) || seen.has(p.av)){ p.av = undefined; changed = true; } else seen.add(p.av); });
+  st.players.forEach(p => { if (!avOk(p.av)){ p.av = freeAvatar(st, -1, p); } });
+  return changed;
+}
+
+/* ---- table geometry: one scale unit (u) from the space available; seats spaced evenly along the rail ---- */
+const TG = { W: 0, H: 0, u: 9, rx: 0, ry: 0, dy: 0 };
+function tableGeom(){
+  const a = $('#h-arena'); if (!a) return false;
+  const W = a.clientWidth, H = a.clientHeight;
+  if (!W || !H || (W === TG.W && H === TG.H)) return false;
+  const u = Math.max(5.5, Math.min(14, W / 100, H / 60));
+  const pw = Math.max(108, u * 15);                 // seat plate width
+  // A seat reaches ~8.9u above its centre (cards over the avatar) and ~6.5u below (plate + status), so centre the table 1.2u low.
+  const rx = Math.max(60, W / 2 - pw / 2 - u * .8), ry = Math.max(60, H / 2 - u * 7.9), dy = u * 1.2;
+  const cw = Math.min(u * 6.2, Math.max(24, (rx - u * 11) * 2 * .82 / 5.6));
+  Object.assign(TG, { W, H, u, rx, ry, dy });
+  const st = $('#h-felt').style;
+  st.setProperty('--dy', dy + 'px');
+  st.setProperty('--u', u + 'px'); st.setProperty('--pw', pw + 'px'); st.setProperty('--cw', cw + 'px'); st.setProperty('--rx', rx + 'px');
+  st.setProperty('--rw', (rx + u * 2.4) * 2 + 'px'); st.setProperty('--rh', (ry + u * 2.4) * 2 + 'px');
+  st.setProperty('--fw', (rx - u * 2.6) * 2 + 'px'); st.setProperty('--fh', (ry - u * 2.6) * 2 + 'px');
+  return true;
+}
+/* Parameters t on the ellipse so that n seats sit at equal distances along the rail, seat 0 at the bottom, going clockwise. */
+function seatParams(n, rx, ry){
+  const M = 720, ts = [], len = [0];
+  for (let k = 0; k <= M; k++) ts.push(Math.PI / 2 + (k / M) * Math.PI * 2);
+  for (let k = 1; k <= M; k++){
+    const a = ts[k - 1], b = ts[k];
+    len.push(len[k - 1] + Math.hypot(rx * (Math.cos(b) - Math.cos(a)), ry * (Math.sin(b) - Math.sin(a))));
+  }
+  const L = len[M], out = [];
+  for (let i = 0; i < n; i++){
+    const target = L * i / n; let k = 0;
+    while (k < M && len[k + 1] < target) k++;
+    const f = len[k + 1] > len[k] ? (target - len[k]) / (len[k + 1] - len[k]) : 0;
+    out.push(ts[k] + f * (ts[k + 1] - ts[k]));
+  }
+  return out;
+}
+const AV_COLORS = ['#7b4b94', '#2f6fb5', '#b8652d', '#2c8a57', '#a83a4a', '#357f8f', '#8a7a2a', '#5a5fb0', '#b04a86', '#4f7a2e'];
+function initials(name){ const w = name.trim().split(/\s+/); return (w.length > 1 ? w[0][0] + w[1][0] : [...name.trim()][0] || '?').toUpperCase(); }
+function seatTag(st, i){
+  const inHand = st.stage === 'betting' || st.stage === 'showdown';
+  if (!inHand) return '';
+  if (i === st.sbIdx) return 'SB';
+  if (i === st.bbIdx) return st.single ? 'BLIND' : 'BB';
+  return '';
+}
 function hostRenderSeats(){
   if (!S || S.stage === 'lobby'){ if (S) hostRender(); return; }
-  const n = S.players.length;
+  tableGeom();
+  const n = S.players.length, cx = TG.W / 2, cy = TG.H / 2 + TG.dy, u = TG.u;
+  const ts = seatParams(n, TG.rx, TG.ry);
+  const at = (t, dx, dy) => [cx + (TG.rx - dx) * Math.cos(t), cy + (TG.ry - dy) * Math.sin(t)];
+  const inHand = S.stage === 'betting' || S.stage === 'showdown';
   patchList($('#h-seats'), S.players.map((p, i) => {
-    const ang = Math.PI / 2 + (i / Math.max(n, 1)) * Math.PI * 2;
-    const x = 50 + 40 * Math.cos(ang), y = 50 + 40 * Math.sin(ang);
-    const inHand = S.stage === 'betting' || S.stage === 'showdown';
+    const [x, y] = at(ts[i], 0, 0);
     const won = !inHand && /^Won/.test(p.last || '');
-    return { cls: 'hseat ' + seatClass(S, i), attrs: { 'data-i': i, 'data-tag': p.tag, style: `--x:${x.toFixed(2)}%;--y:${y.toFixed(2)}%`, role: 'button', tabindex: '0' },
-      html: `<div class="nm"><i class="dot ${isOn(p) ? 'on' : ''}"></i><span>${esc(p.name)}</span></div>
-      <div class="pos">${posTags(S, i)}</div>
-      <div class="stk">${fmt(p.stack)}</div>
-      <div class="hole">${inHand && !p.folded && !p.out ? '<i></i><i></i>' : ''}</div>
-      <div class="bet">${p.bet > 0 ? `<i class="chipdot"></i>${fmt(p.bet)}` : ''}</div>
+    const tag = seatTag(S, i), col = AV_COLORS[parseInt(String(p.tag).slice(0, 6), 16) % AV_COLORS.length || 0] || AV_COLORS[0];
+    return { cls: 'hseat ' + seatClass(S, i), attrs: { 'data-i': i, 'data-tag': p.tag, style: `--x:${x.toFixed(1)}px;--y:${y.toFixed(1)}px`, role: 'button', tabindex: '0' },
+      html: `<div class="hole">${inHand && !p.folded && !p.out ? '<i></i><i></i>' : ''}</div>
+      ${avOk(p.av) ? `<div class="av icon" style="--c:${AVATARS[p.av].c}">${avSvg(p.av)}<i class="dot ${isOn(p) ? 'on' : ''}"></i></div>`
+                   : `<div class="av" style="--c:${col}">${esc(initials(p.name))}<i class="dot ${isOn(p) ? 'on' : ''}"></i></div>`}
+      <div class="plate"><div class="nm"><span>${esc(p.name)}</span>${tag ? `<em>${tag}</em>` : ''}</div><div class="stk">${fmt(p.stack)}</div></div>
       <div class="st${won ? ' won' : ''}">${esc(seatStatus(S, i)) || '&nbsp;'}</div>` };
   }));
+  // bets sit on the felt between each seat and the centre
+  patchList($('#h-bets'), S.players.map((p, i) => {
+    if (!(p.bet > 0)) return { cls: 'betspot', attrs: { style: 'display:none' }, html: '' };
+    const [x, y] = at(ts[i], u * 12.6, u * 11.2);
+    const nChips = Math.max(1, Math.min(5, Math.round(Math.log2(p.bet / ((S.handSB || 1)) + 1))));
+    const chips = Array.from({ length: nChips }, (_, k) => `<i style="--k:${k};background-image:${CHIP_IMG[(i + k) % CHIP_IMG.length] || 'none'}"></i>`).join('');
+    return { cls: 'betspot', attrs: { 'data-tag': p.tag, style: `--x:${x.toFixed(1)}px;--y:${y.toFixed(1)}px` },
+      html: `<div class="pile" style="--n:${nChips - 1}">${chips}</div><b>${fmt(p.bet)}</b>` };
+  }), 'div');
+  // dealer button slides between seats
+  const d = $('#h-dbtn');
+  if (S.hand && S.dealer >= 0 && S.dealer < n){
+    const t = ts[S.dealer] + (n > 1 ? 0.32 / Math.max(1, n / 4) : 0.3);
+    const [x, y] = at(t, u * 7.6, u * 6.4);
+    d.hidden = false; d.style.setProperty('--x', x.toFixed(1) + 'px'); d.style.setProperty('--y', y.toFixed(1) + 'px');
+  } else d.hidden = true;
 }
+function relayoutTable(){ if (tableGeom() && S && S.stage !== 'lobby') hostRenderSeats(); }
+if (window.ResizeObserver) new ResizeObserver(relayoutTable).observe($('#h-arena'));
+addEventListener('resize', relayoutTable);
+addEventListener('orientationchange', () => setTimeout(relayoutTable, 300));
 /* Update only the rows that changed, so one action repaints one seat instead of the whole table. */
-function patchList(ul, items){
+function patchList(ul, items, tagName = 'li'){
   while (ul.children.length > items.length) ul.lastElementChild.remove();
-  while (ul.children.length < items.length) ul.appendChild(document.createElement('li'));
+  while (ul.children.length < items.length) ul.appendChild(document.createElement(tagName));
   items.forEach((it, k) => {
     const li = ul.children[k], sig = it.cls + '|' + JSON.stringify(it.attrs || {}) + '|' + it.html;
     if (li.__sig === sig) return;
     if (li.className !== it.cls) li.className = it.cls;
+    for (const a of [...li.getAttributeNames()]) if (a !== 'class' && !(a in (it.attrs || {}))) li.removeAttribute(a);
     for (const [a, v] of Object.entries(it.attrs || {})) if (li.getAttribute(a) !== String(v)) li.setAttribute(a, v);
     if (li.__html !== it.html){ li.innerHTML = it.html; li.__html = it.html; }
     li.__sig = sig;
@@ -3599,11 +3837,11 @@ function hostRenderDock(){
     const counting = !VIEW && AD.at && !AD.paused;
     msg = `<b>${esc(S.result || 'Ready')}</b><span>${S.resultSub ? esc(S.resultSub) + ' · ' : ''}Button moves to ${n >= 0 ? esc(P(n).name) : 'the next player'}${counting ? ` · <b id="h-count" style="display:inline;font:inherit;color:var(--brass)">Next hand in ${Math.max(1, Math.ceil((AD.at - Date.now()) / 1000))}s</b>` : ''}</span>`;
     const bountyBtns = S.bounty && S.bountyHand !== S.hand ? (S.lastWin || []).map(t => S.players.find(p => p.tag === t)).filter(Boolean)
-      .map(p => `<button class="btn b-allin" data-h="bounty" data-tag="${p.tag}" style="font-size:17px">7-2 · ${esc(p.name)}</button>`).join('') : '';
+      .map(p => `<button class="btn b-allin" data-h="bounty" data-tag="${p.tag}" style="font-size:17px">7-2 offsuit · ${esc(p.name)}</button>`).join('') : '';
     btns = bountyBtns + (counting ? `<button class="btn b-fold" data-h="pause">Pause</button><button class="btn b-raise" data-h="deal">Deal now</button>`
                                   : `<button class="btn b-raise" data-h="deal">Deal hand ${S.hand + 1}</button>`);
   }
-  if (S.closed){ cls = ''; msg = `<b>Table closed</b><span>${esc(S.table.label)} has ended. Thanks for playing.</span>`; btns = VIEW ? `<button class="btn b-raise" data-h="home">Back to start</button>` : ''; }
+  if (S.closed){ cls = ''; const pl = settlePlan(S); msg = `<b>Table closed</b><span>${pl.pays.length ? pl.pays.map(x => `${esc(x.from)} pays ${esc(x.to)} ${moneyText(x.chips, pl.m)}`).join(' · ') : 'Everyone finished even.'}</span>`; btns = VIEW ? `<button class="btn b-raise" data-h="home">Back to start</button>` : ''; }
   else if (VIEW) btns = '';
   else if (S.stage === 'lobby' || S.stage === 'over' || (S.stage === 'done' && !(AD.at && !AD.paused))) btns = `<button class="btn b-fold" data-h="close">Close table</button>` + btns;
   d.innerHTML = `<div class="msg${cls}">${msg}</div><div class="btns">${btns}</div>`;
@@ -3727,9 +3965,12 @@ function renderHostMenu(){
       <div class="grid2"><label><span class="lbl">Small blind</span><input class="txt" id="m-sb" inputmode="numeric" value="${S.sb}"></label>
       <label><span class="lbl">Big blind</span><input class="txt" id="m-bb" inputmode="numeric" value="${S.bb}"></label></div>
       <button class="btn-sec" data-m="blinds">Save blinds</button><p class="hint" id="m-msg">New blinds start with the next hand.</p></div>`}
-    <div class="m-sec"><h3>7-2 bounty</h3>
+    <div class="m-sec"><h3>Chip value</h3>
+      <div class="rate"><input class="txt" id="m-rate" inputmode="numeric" value="${moneyOf(S).chips}" aria-label="Chips"><span>chips =</span><b>1</b><input class="txt" id="m-cur" maxlength="5" value="${esc(moneyOf(S).cur)}" aria-label="Currency"><button class="btn-sec" data-m="rate" style="margin:0;height:48px">Save</button></div>
+      <p class="hint" id="m-rmsg">Used for the settle-up when the table closes.</p></div>
+    <div class="m-sec"><h3>7-2 offsuit bounty</h3>
       <div class="add-row"><input class="txt" id="m-bounty" inputmode="numeric" value="${S.bounty || 0}"><button class="btn-sec" data-m="bounty">Save</button></div>
-      <p class="hint" id="m-bmsg">After a hand, tap the 7-2 button for a winner who shows 7-2. Set 0 to turn it off.</p></div>
+      <p class="hint" id="m-bmsg">After a hand, tap the 7-2 offsuit button for a winner who shows 7-2 of different suits. Suited 7-2 doesn't count. Set 0 to turn it off.</p></div>
     ${S.players.length < S.table.max ? `<div class="m-sec"><h3>Add a player without a phone</h3>
       <div class="add-row"><input class="txt" id="m-add" maxlength="14" placeholder="Name" autocomplete="off"><button class="btn-sec" data-m="add">Add seat</button></div>
       <p class="hint">You act for them by tapping their seat. If they later join from a phone with the same name, the seat moves to their phone.</p></div>` : ''}
@@ -3742,6 +3983,13 @@ function renderHostMenu(){
     <div class="m-sec"><button class="btn-danger" data-m="close">Close ${esc(S.table.label)}</button><p class="hint">Phones see that the table closed. Your next table gets a new code.</p></div>`;
 }
 $('#menu-body').addEventListener('click', e => {
+  const ab = e.target.closest('#p-avpick [data-av]');
+  if (ab && !ab.disabled && Pn.client && Pn.connected){
+    const v = +ab.dataset.av; joinAv = v; store.set('hgc-av', String(v));
+    $$('#p-avpick .avopt').forEach(x => { x.classList.toggle('on', x === ab); x.setAttribute('aria-pressed', x === ab); });
+    Pn.client.publish(topic(Pn.code, 'cmd'), JSON.stringify({ type: 'avatar', pid: Pn.pid, av: v }), { qos: 1 });
+    Snd.tick(); return;
+  }
   const b = e.target.closest('[data-m]'); if (!b || b.disabled) return;
   const m = b.dataset.m;
   if (m === 'sound'){ Snd.on = !Snd.on; store.set('hgc-sound', Snd.on ? 'on' : 'off'); b.setAttribute('aria-checked', Snd.on); if (Snd.on){ Snd.init(); Snd.chips(3); } return; }
@@ -3755,17 +4003,22 @@ $('#menu-body').addEventListener('click', e => {
     if (sb === S.sb && bb === S.bb){ msg.textContent = 'Those are already the blinds.'; return; }
     snap(); S.sb = sb; S.bb = bb; log($('#m-sb') ? `Blinds go to ${fmt(sb)}/${fmt(bb)} next hand` : `Blind goes to ${fmt(bb)} next hand`); commit(null, { seq: false });
     msg.textContent = $('#m-sb') ? `Saved. ${fmt(sb)}/${fmt(bb)} starts next hand.` : `Saved. A blind of ${fmt(bb)} starts next hand.`;
+  } else if (m === 'rate'){
+    const chips = toInt($('#m-rate').value, 0), cur = String($('#m-cur').value).toUpperCase().replace(/[^A-Z$€£¥]/g, '').slice(0, 5) || 'HKD';
+    if (!chips){ $('#m-rmsg').textContent = 'Enter how many chips make 1 unit of money.'; return; }
+    snap(); S.money = { chips, cur }; log(`Chip value set to ${fmt(chips)} chips = 1 ${cur}`); commit(null, { seq: false });
+    $('#m-rmsg').textContent = `Saved. ${fmt(chips)} chips = 1 ${cur}.`;
   } else if (m === 'bounty'){
     const raw = String($('#m-bounty').value).trim(), v = raw === '' ? 0 : (parseInt(raw.replace(/[^\d]/g, ''), 10) || 0), msg = $('#m-bmsg');
     if (v === (S.bounty || 0)){ msg.textContent = 'That is already the bounty.'; return; }
-    snap(); S.bounty = v; log(v ? `7-2 bounty set to ${fmt(v)}` : '7-2 bounty turned off'); commit(null, { seq: false });
-    msg.textContent = v ? `Saved. The 7-2 bounty is ${fmt(v)}.` : 'Saved. The 7-2 bounty is off.';
+    snap(); S.bounty = v; log(v ? `7-2 offsuit bounty set to ${fmt(v)}` : '7-2 offsuit bounty turned off'); commit(null, { seq: false });
+    msg.textContent = v ? `Saved. The 7-2 offsuit bounty is ${fmt(v)}.` : 'Saved. The 7-2 offsuit bounty is off.';
   } else if (m === 'add'){
     const name = cleanName($('#m-add').value);
     if (!name){ toast('Enter a name first.'); return; }
     if (S.players.some(p => p.name.toLowerCase() === name.toLowerCase())){ toast('Someone already has that name.'); return; }
     const pid = 'host-' + makeId(16);
-    tagOf(pid).then(tag => { S.players.push(newPlayer(name, pid, tag)); refreshOver(); log(`${name} sat down${S.hand ? ', dealt in next hand' : ''}`); commit({ kind: 'join', tag }, { seq: false }); renderHostMenu(); });
+    tagOf(pid).then(tag => { S.players.push(newPlayer(name, pid, tag, -1)); refreshOver(); log(`${name} sat down${S.hand ? ', dealt in next hand' : ''}`); commit({ kind: 'join', tag }, { seq: false }); renderHostMenu(); });
   } else if (m === 'export'){
     exportTable(S); toast('Table file saved. Check your Downloads or Files app.');
   } else if (m === 'move'){
@@ -3837,6 +4090,42 @@ $('#r-ok').addEventListener('click', () => {
 /* ================= phone (player) ================= */
 const Pn = { code: null, broker: 0, pid: null, tag: null, name: '', client: null, st: null, lastV: 0, connected: false, hostOn: true, pending: null, lastFx: null, mine: false, last: { v: 0 }, seated: false, tried: 0 };
 const phoneKey = code => 'hgc-phone:' + code;
+let joinAv = (() => { const v = parseInt(store.get('hgc-av'), 10); return avOk(v) ? v : -1; })();
+function avPickHTML(sel, taken){
+  return AVATARS.map((a, k) => `<button type="button" class="avopt${k === sel ? ' on' : ''}" data-av="${k}"${taken && taken[k] ? ` disabled title="${esc(taken[k])} has this one"` : ''} aria-pressed="${k === sel}">${avDisc(k, 52)}<small>${a.name}</small></button>`).join('');
+}
+/* While the join screen is open with a full code, quietly read the table's state to grey out avatars already in use. */
+const Peek = { c: null, code: '', taken: null, mine: null };
+function renderJoinPicker(){
+  const tk = Peek.taken;
+  if (tk && avOk(joinAv) && tk[joinAv]){ const f = AVATARS.findIndex((a, k) => !tk[k]); if (f >= 0) joinAv = f; }
+  $('#j-av').innerHTML = avPickHTML(joinAv, tk);
+}
+function peekStop(){ if (Peek.c){ try { Peek.c.end(true); } catch(e){} } Peek.c = null; Peek.code = ''; Peek.taken = null; }
+async function peekTable(code){
+  if (code === Peek.code) return;
+  peekStop(); renderJoinPicker();
+  if (code.length !== 6 || typeof mqtt === 'undefined') return;
+  Peek.code = code;
+  const rec = store.json(phoneKey(code)) || {};
+  const mine = rec.pid ? await tagOf(rec.pid) : null;
+  if (Peek.code !== code) return;
+  const b = QS.get('t') === code && QS.get('b') ? +QS.get('b') : (rec.b || 0);
+  let c;
+  try { c = mqtt.connect(BROKERS[b % BROKERS.length], { clientId: 'hgc_k_' + makeId(10), keepalive: 30, reconnectPeriod: 3000, connectTimeout: 8000, clean: true }); } catch(e){ return; }
+  Peek.c = c;
+  c.on('connect', () => { if (Peek.c === c) c.subscribe(topic(code, 'state'), { qos: 0 }); });
+  c.on('error', () => {});
+  c.on('message', (t, buf) => {
+    if (Peek.c !== c) return;
+    let m; try { m = JSON.parse(buf.toString()); } catch(e){ return; }
+    if (!m || !m.table || m.table.code !== code || !Array.isArray(m.players)) return;
+    const tk = {};
+    if (!m.closed) m.players.forEach(q => { if (avOk(q.av) && q.tag !== mine) tk[q.av] = q.name || 'Someone'; });
+    Peek.taken = tk; renderJoinPicker();
+  });
+}
+$('#j-av').addEventListener('click', e => { const b = e.target.closest('[data-av]'); if (!b || b.disabled) return; joinAv = +b.dataset.av; Snd.tick(); renderJoinPicker(); });
 async function phoneJoin(){
   const code = $('#j-code').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
   const name = cleanName($('#j-name').value), err = $('#j-err');
@@ -3846,6 +4135,7 @@ async function phoneJoin(){
   const rec = store.json(phoneKey(code)) || {};
   const pid = rec.pid || makeId(20);
   const b = QS.get('t') === code && QS.get('b') ? +QS.get('b') : (rec.b || 0);
+  if (avOk(joinAv)) store.set('hgc-av', String(joinAv));
   store.set(phoneKey(code), JSON.stringify({ pid, name, b }));
   store.set('hgc-phone-last', code);
   await phoneStart(code, pid, name, b);
@@ -3877,7 +4167,7 @@ function phoneConnect(idx){
     Pn.connected = true; netDot('#p-net', 'on'); phoneBanner();
     c.subscribe([topic(code, 'state'), topic(code, 'host'), topic(code, 'to/' + Pn.tag)], { qos: 1 });
     c.publish(topic(code, 'presence/' + Pn.tag), '1', { qos: 1, retain: true });
-    c.publish(topic(code, 'cmd'), JSON.stringify({ type: 'join', pid: Pn.pid, name: Pn.name }), { qos: 1 });
+    c.publish(topic(code, 'cmd'), JSON.stringify({ type: 'join', pid: Pn.pid, name: Pn.name, av: avOk(joinAv) ? joinAv : -1 }), { qos: 1 });
   });
   const down = () => { if (Pn.client !== c) return; Pn.connected = false; netDot('#p-net', 'off'); phoneBanner(); phoneRender(); };
   c.on('close', down); c.on('offline', down); c.on('error', () => {});
@@ -3931,18 +4221,18 @@ function phoneState(m){
   Pn.mine = myTurn;
   phoneRender();
   phoneBanner();
-  if (prev && !prev.closed && m.closed) toast('The table was closed.');
   if (m.closed) forgetSeat();
 }
 const phoneSeat = () => Pn.st ? Pn.st.players.findIndex(p => p.tag === Pn.tag) : -1;
 const ACTS = ['fold', 'check', 'call', 'bet', 'raise', 'allin'];
 function phoneFx(fx){
+  if (Pn.st && Pn.st.closed) return;
   const mineAct = fx.tag === Pn.tag && ACTS.includes(fx.kind);
   if (mineAct && Pn.ownPlayed){ Pn.ownPlayed = false; }          // already played the moment you tapped
   else if (fx.kind === 'allin') { Snd.allIn(); allInFx(fx.name, $('#p-me')); }
   else if (mineAct || (fx.tag === Pn.tag && fx.kind === 'topup')) playOwn(fx.kind);   // the table acted for you
   else if (fx.kind === 'deal') Snd.shuffle();
-  else if (fx.kind === 'bounty'){ if (fx.tag === Pn.tag) Snd.win(); else if ((fx.payers || []).includes(Pn.tag)){ Snd.chips(3); toast(`${fx.name} showed 7-2. You paid the bounty.`); } }
+  else if (fx.kind === 'bounty'){ if (fx.tag === Pn.tag) Snd.win(); else if ((fx.payers || []).includes(Pn.tag)){ Snd.chips(3); toast(`${fx.name} showed 7-2 offsuit. You paid the bounty.`); } }
   else if (fx.kind === 'win' && (fx.tags || []).includes(Pn.tag)) Snd.win();
   if (fx.after && fx.after.kind === 'win' && (fx.after.tags || []).includes(Pn.tag)) setTimeout(() => Snd.win(), 400);
 }
@@ -3959,6 +4249,8 @@ function phoneRender(){
   $('#p-pot').textContent = fmt(potTotal(st));
   const myTurn = st.stage === 'betting' && st.toAct === me && me >= 0;
   $('#p-me').classList.toggle('turn', myTurn && !Pn.pending);
+  const avh = p ? avDisc(p.av, 34) : '';
+  if ($('#p-av').__h !== avh){ $('#p-av').innerHTML = avh; $('#p-av').__h = avh; }
   if (p){
     $('#p-stack').textContent = fmt(p.stack);
     $('#p-bet').textContent = p.bet ? `In front: ${fmt(p.bet)}` : 'chips';
@@ -3969,13 +4261,28 @@ function phoneRender(){
     $('#p-stack').textContent = '–'; $('#p-bet').textContent = ''; $('#p-status').textContent = "You're not seated at this table anymore.";
   }
   patchList($('#p-list'), st.players.map((q, i) => ({ cls: `prow ${seatClass(st, i)}${i === me ? ' mine' : ''}`,
-    html: `<div class="pos">${posTags(st, i)}</div>
-      <div><div class="nm"><i class="dot ${q.on ? 'on' : ''}"></i><span>${esc(q.name)}${i === me ? ' (you)' : ''}</span></div><div class="st">${esc(seatStatus(st, i)) || '&nbsp;'}</div></div>
+    html: `<div><div class="nm">${avDisc(q.av, 22)}<span>${esc(q.name)}${i === me ? ' (you)' : ''}</span><span class="ptags">${posTags(st, i)}</span><i class="dot ${q.on ? 'on' : ''}"></i></div><div class="st">${esc(seatStatus(st, i)) || '&nbsp;'}</div></div>
       <div class="money"><b>${fmt(q.stack)}</b>${q.bet > 0 ? `<span><i class="chipdot"></i>${fmt(q.bet)}</span>` : ''}</div>` })));
   const a = $('.prow.acting'); if (a) a.scrollIntoView({ block: 'nearest' });
+  // after closing, the table strip and seat list give way to the full settle-up list
+  $('#p-strip').hidden = $('#p-list').hidden = !!st.closed; $('#p-settle').hidden = !st.closed;
   // dock
   const d = $('#p-dock');
-  if (st.closed){ d.innerHTML = `<div class="btns one"><button class="btn b-raise" data-p="home">Leave</button></div>`; return; }
+  if (st.closed){
+    const plan = settlePlan(st), mine = plan.rows.find(r => p && r.name === p.name);
+    const sh = `<span class="lbl">Who pays who</span><div class="pays">${paysHTML(st, plan, p ? p.name : '', 22)}</div><p class="hint">${fmt(plan.m.chips)} chips = 1 ${esc(plan.m.cur)}</p>`;
+    if ($('#p-settle').__h !== sh){ $('#p-settle').innerHTML = sh; $('#p-settle').__h = sh; }
+    let box = '';
+    if (mine){
+      const lines = plan.pays.filter(x => x.from === mine.name || x.to === mine.name)
+        .map(x => x.from === mine.name ? `You pay <b style="font-size:inherit;font-family:inherit">${esc(x.to)}</b> ${moneyText(x.chips, plan.m)}` : `<b style="font-size:inherit;font-family:inherit">${esc(x.from)}</b> pays you ${moneyText(x.chips, plan.m)}`);
+      box = `<div class="mine-pay"><span class="lbl" style="margin:0">Your result · ${fmt(plan.m.chips)} chips = 1 ${esc(plan.m.cur)}</span>
+        <b class="${mine.net > 0 ? 'pos' : mine.net < 0 ? 'neg' : ''}">${mine.net > 0 ? '+' : mine.net < 0 ? '−' : ''}${moneyText(mine.net, plan.m)}</b>
+        ${lines.length ? lines.map(l => `<p>${l}</p>`).join('') : '<p>You finished even. Nothing to pay.</p>'}</div>`;
+    }
+    d.innerHTML = box + `<div class="btns one"><button class="btn b-raise" data-p="home">Leave</button></div>`;
+    return;
+  }
   if (!p){ d.innerHTML = Pn.seated ? `<div class="btns one"><button class="btn b-fold" data-p="home">Back to start</button></div>` : ''; return; }
   if (st.stage === 'betting' && p && !p.folded && !p.out){
     const actor = st.players[st.toAct];
@@ -4052,6 +4359,7 @@ $('#p-menu').addEventListener('click', () => {
   $('#menu-body').innerHTML = `
     <div class="m-sec m-row"><div><h3>Sound effects</h3><p class="hint">No sound? Turn the volume up and check the silent switch.</p></div>
       <button class="switch" data-m="sound" role="switch" aria-checked="${Snd.on}" aria-label="Sound effects"><span></span></button></div>
+    ${p ? `<div class="m-sec"><h3>Your avatar</h3><div class="avpick" id="p-avpick">${avPickHTML(p.av, Object.fromEntries(st.players.filter(q => q !== p && avOk(q.av)).map(q => [q.av, q.name])))}</div></div>` : ''}
     ${p ? `<div class="m-sec"><h3>Top up</h3><p class="hint" style="margin:0 0 8px">You can refill to the starting stack of ${fmt(st.startStack)} between hands. ${p.stack >= st.startStack ? 'You are already at the starting stack.' : inHand ? 'If you book it now, it lands when this hand ends.' : ''}</p>
       <button class="btn-sec" data-m="ptopup"${p.stack >= st.startStack || p.topup ? ' disabled' : ''}>${p.topup ? 'Top-up booked' : `Top up ${fmt(Math.max(0, st.startStack - p.stack))}`}</button></div>` : ''}
     <div class="m-sec"><h3>${esc(st ? st.table.label : 'Table')} · ${esc(Pn.code)}</h3>
@@ -4068,7 +4376,7 @@ function watchStart(code, b){
   Object.assign(Wt, { lastFx: null, lastV: 0, hostOn: true, tried: 0 });
   store.set('hgc-watch-last', JSON.stringify({ code, b: b || 0 }));
   show('host');
-  $('#h-label').textContent = 'Table'; $('#h-code').textContent = code; $('#h-meta').textContent = '';
+  $('#h-label').textContent = 'Table'; $('#h-code').textContent = code; $('#h-meta').innerHTML = ''; $('#h-meta').__h = '';
   $('#h-undo').hidden = true; $('#h-menu').hidden = true; $('#h-leave').hidden = false; $('#h-viewtag').hidden = false;
   $('#h-lobby').hidden = true; $('#h-felt').hidden = true; $('#h-seats').hidden = true;
   $('#h-dock').innerHTML = '<div class="msg"><b>Connecting</b><span>Looking for the table…</span></div>';
@@ -4149,7 +4457,7 @@ async function importTable(src){
     const name = cleanName(p.name);
     if (!name || players.some(q => q.name.toLowerCase() === name.toLowerCase()) || players.length >= 10) continue;
     const pid = 'moved-' + makeId(16);
-    players.push({ name, pid, tag: await tagOf(pid), stack: n(p.stack) + n(p.committed), bought: n(p.bought), bet: 0, committed: 0, folded: true, allIn: false, acted: false, locked: false, out: false, last: 'Rejoin with the same name', topup: false, leaving: false });
+    players.push({ name, pid, av: Number.isInteger(p.av) ? p.av : -1, tag: await tagOf(pid), stack: n(p.stack) + n(p.committed), bought: n(p.bought), bet: 0, committed: 0, folded: true, allIn: false, acted: false, locked: false, out: false, last: 'Rejoin with the same name', topup: false, leaving: false });
   }
   if (!players.length) throw new Error('That file has no players in it.');
   const count = (toInt(store.get('hgc-table-count'), 0) || 0) + 1;
@@ -4161,8 +4469,9 @@ async function importTable(src){
         startStack: n(src.startStack), sb, bb, handSB: sb, handBB: bb,
         dealer: Number.isInteger(src.dealer) && src.dealer >= -1 && src.dealer < players.length ? src.dealer : -1, sbIdx: -1, bbIdx: -1,
         street: 0, currentBet: 0, minRaise: bb, toAct: -1, hand: n(src.hand), stage: 'lobby', result: '', resultSub: '',
-        pots: null, runout: false, seq: 0, fx: null, log: [], closed: false, bounty: n(src.bounty), lastDealt: [], lastWin: [], bountyHand: 0,
+        pots: null, runout: false, seq: 0, fx: null, log: [], closed: false, bounty: n(src.bounty), lastDealt: [], lastWin: [], bountyHand: 0, money: moneyOf(src),
         hands: Array.isArray(src.hands) ? src.hands.slice(-1000) : [] };
+  ensureAvatars(S);
   log(`Moved here from ${from}`);
   Object.assign(H, { code, pubN: 0, fxN: 0, hist: [], online: {}, broker: 0, last: { v: 0 } });
   AD.paused = true;
@@ -4204,6 +4513,34 @@ function tableSummary(st){
   rows.sort((a, b) => b.net - a.net);
   return { rows, big, hands: (st.hands || []).length || st.hand };
 }
+const moneyOf = st => ({ chips: (st.money && st.money.chips > 0) ? st.money.chips : 10, cur: (st.money && st.money.cur) || 'HKD' });
+/* chips → money, e.g. 125 chips at 10 chips per 1 HKD → "HKD 12.50" (whole amounts drop the decimals) */
+function moneyText(chips, m){
+  const v = Math.abs(chips) / m.chips, whole = Math.abs(v - Math.round(v)) < 1e-9;
+  return `${m.cur} ${v.toLocaleString('en-US', whole ? { maximumFractionDigits: 0 } : { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+/* Fewest-payments settle-up: the biggest loser pays the biggest winner until everyone is square. Works in chips so nothing is lost to rounding. */
+function settlePlan(st){
+  const sm = tableSummary(st), cred = [], debt = [];
+  sm.rows.forEach(r => { if (r.net > 0) cred.push({ name: r.name, left: r.net }); else if (r.net < 0) debt.push({ name: r.name, left: -r.net }); });
+  cred.sort((a, b) => b.left - a.left); debt.sort((a, b) => b.left - a.left);
+  const pays = []; let i = 0, j = 0;
+  while (i < debt.length && j < cred.length){
+    const amt = Math.min(debt[i].left, cred[j].left);
+    if (amt > 0) pays.push({ from: debt[i].name, to: cred[j].name, chips: amt });
+    debt[i].left -= amt; cred[j].left -= amt;
+    if (!debt[i].left) i++;
+    if (!cred[j].left) j++;
+  }
+  return { rows: sm.rows, pays, m: moneyOf(st) };
+}
+function avByName(st, name, size = 28){ const p = st.players.find(q => q.name === name); return p && avOk(p.av) ? avDisc(p.av, size) : ''; }
+function paysHTML(st, plan, me = null, size = 28){
+  if (!plan.pays.length) return '<div class="pay even">Everyone finished even. Nobody owes anything.</div>';
+  return plan.pays.map(x => `<div class="pay${me && (x.from === me || x.to === me) ? ' mypay' : ''}"><div class="who">${avByName(st, x.from, size)}<span>${esc(x.from)}</span></div><div class="arrow">${me !== null ? '→' : 'pays →'}</div>
+    <div class="who">${avByName(st, x.to, size)}<span>${esc(x.to)}</span></div><div class="amt">${moneyText(x.chips, plan.m)}</div></div>`).join('');
+}
+
 function renderHistory(){
   const list = allTables();
   $('#hist-list').innerHTML = list.length ? list.map(({ code, S: st }) => {
@@ -4216,18 +4553,22 @@ let histCode = null;
 function renderHistDetail(code){
   const r = store.json(hostKey(code)); if (!r || !r.S){ show('history'); renderHistory(); return; }
   histCode = code;
-  const st = r.S, sm = tableSummary(st);
+  const st = r.S, sm = tableSummary(st), plan = settlePlan(st);
   $('#hd-title').textContent = st.table.label;
+  $('#hd-paylbl').textContent = st.closed ? 'Who pays who' : 'Who pays who (so far)';
+  $('#hd-pays').innerHTML = paysHTML(st, plan);
+  $('#hd-rate').textContent = `${fmt(plan.m.chips)} chips = 1 ${plan.m.cur}. Fewest payments that square everyone up.`;
   $('#hd-sub').textContent = `${fmtDate(st.table.created)} · code ${code} · ${st.closed ? 'closed' : 'still open'} · blinds ${fmt(st.sb)}/${fmt(st.bb)} · starting stack ${fmt(st.startStack)}`;
   $('#hd-stats').innerHTML = `<div><b>${sm.hands}</b><span>hands played</span></div>
     <div><b>${durText(st.table.created, st.table.closedAt || st.table.lastAt)}</b><span>length</span></div>
     <div><b>${sm.rows.length}</b><span>players</span></div>
     <div><b>${sm.big ? fmt(sm.big.pot) : '0'}</b><span>${sm.big ? `biggest pot, hand ${sm.big.n}, ${esc(sm.big.win.map(w => w[0]).join(' & '))}` : 'biggest pot'}</span></div>`;
-  $('#hd-table').innerHTML = `<thead><tr><th>Player</th><th class="num">Bought</th><th class="num">Chips</th><th class="num">Net</th><th class="num">Hands won</th></tr></thead><tbody>` +
-    sm.rows.map(x => `<tr class="${x.left ? 'gone' : ''}"><td class="nm">${esc(x.name)}${x.left ? ' (left)' : ''}</td><td class="num">${fmt(x.bought)}</td><td class="num">${fmt(x.chips)}</td><td class="num ${x.net > 0 ? 'pos' : x.net < 0 ? 'neg' : ''}">${x.net > 0 ? '+' : x.net < 0 ? '−' : ''}${fmt(Math.abs(x.net))}</td><td class="num">${x.won}</td></tr>`).join('') + '</tbody>';
+  $('#hd-table').innerHTML = `<thead><tr><th>Player</th><th class="num">Bought</th><th class="num">Chips</th><th class="num">Net</th><th class="num">${esc(plan.m.cur)}</th><th class="num">Hands won</th></tr></thead><tbody>` +
+    sm.rows.map(x => { const c = x.net > 0 ? 'pos' : x.net < 0 ? 'neg' : '', sg = x.net > 0 ? '+' : x.net < 0 ? '−' : '';
+      return `<tr class="${x.left ? 'gone' : ''}"><td class="nm">${esc(x.name)}${x.left ? ' (left)' : ''}</td><td class="num">${fmt(x.bought)}</td><td class="num">${fmt(x.chips)}</td><td class="num ${c}">${sg}${fmt(Math.abs(x.net))}</td><td class="num ${c}">${sg}${moneyText(x.net, plan.m).replace(/^\S+ /, '')}</td><td class="num">${x.won}</td></tr>`; }).join('') + '</tbody>';
   const hs = (st.hands || []).slice(-15).reverse();
   $('#hd-hands').innerHTML = hs.length ? `<thead><tr><th>Hand</th><th>Winner</th><th class="num">Pot</th></tr></thead><tbody>` +
-    hs.map(h => `<tr><td>${h.n}</td><td class="nm">${esc(h.win.map(w => w[0]).join(' & '))}${h.bounty ? ` · 7-2 bounty +${fmt(h.bounty[1])}` : ''}</td><td class="num">${fmt(h.pot)}</td></tr>`).join('') + '</tbody>' : '<tbody><tr><td>No hands finished yet.</td></tr></tbody>';
+    hs.map(h => `<tr><td>${h.n}</td><td class="nm">${esc(h.win.map(w => w[0]).join(' & '))}</td><td class="num">${fmt(h.pot)}</td></tr>`).join('') + '</tbody>' : '<tbody><tr><td>No hands finished yet.</td></tr></tbody>';
   $('#hd-actions').innerHTML = `<button class="cta alt" data-hd="csv">Download results (spreadsheet)</button>
     <button class="btn-sec" data-hd="export" style="margin:0;height:48px">Download table file</button>
     ${st.closed ? `<button class="btn-sec" data-hd="continue" style="margin:0;height:48px">Continue in a new table</button>` : ''}
@@ -4240,8 +4581,10 @@ function downloadCsv(code){
   const r = store.json(hostKey(code)); if (!r) return;
   const st = r.S, sm = tableSummary(st);
   const lines = [['Table', st.table.label], ['Code', code], ['Started', fmtDate(st.table.created)], ['Starting stack', st.startStack], ['Blinds', `${st.sb}/${st.bb}`], [],
-    ['Player', 'Bought', 'Chips', 'Net', 'Hands won'], ...sm.rows.map(x => [x.name + (x.left ? ' (left)' : ''), x.bought, x.chips, x.net, x.won]), [],
-    ['Hand', 'Pot', 'Winners', '7-2 bounty'], ...(st.hands || []).map(h => [h.n, h.pot, h.win.map(w => `${w[0]} ${w[1]}`).join('; '), h.bounty ? `${h.bounty[0]} ${h.bounty[1]}` : ''])];
+    ['Chip value', `${moneyOf(st).chips} chips = 1 ${moneyOf(st).cur}`], [],
+    ['Player', 'Bought', 'Chips', 'Net', `Net (${moneyOf(st).cur})`, 'Hands won'], ...sm.rows.map(x => [x.name + (x.left ? ' (left)' : ''), x.bought, x.chips, x.net, +(x.net / moneyOf(st).chips).toFixed(2), x.won]), [],
+    ['Who pays', 'Pays who', `Amount (${moneyOf(st).cur})`, 'Chips'], ...settlePlan(st).pays.map(x => [x.from, x.to, +(x.chips / moneyOf(st).chips).toFixed(2), x.chips]), [],
+    ['Hand', 'Pot', 'Winners'], ...(st.hands || []).map(h => [h.n, h.pot, h.win.map(w => `${w[0]} ${w[1]}`).join('; ')])];
   const blob = new Blob([lines.map(l => l.map(csvCell).join(',')).join('\n')], { type: 'text/csv' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = `${st.table.label.replace(/\s+/g, '-')}-${code}.csv`; document.body.appendChild(a); a.click();
@@ -4308,7 +4651,7 @@ $('#go-create').addEventListener('click', () => {
   $('#create-title').textContent = `New table · Table ${count}`;
   show('create');
 });
-$('#go-join').addEventListener('click', () => { $('#j-code').value = ''; $('#j-err').textContent = ''; show('join'); });
+$('#go-join').addEventListener('click', () => { peekStop(); $('#j-code').value = ''; $('#j-err').textContent = ''; renderJoinPicker(); show('join'); });
 $$('[data-nav="home"]').forEach(b => b.addEventListener('click', goHome));
 /* Under 4 seats a hand only ever has one blind, so the form asks for just that one. */
 function syncBlindFields(){
@@ -4323,7 +4666,7 @@ $('#v-create').addEventListener('click', e => { const b = e.target.closest('[dat
 syncBlindFields();
 $('#c-open').addEventListener('click', () => { Snd.init(); hostCreate(); });
 $('#j-go').addEventListener('click', () => { Snd.init(); phoneJoin(); });
-$('#j-code').addEventListener('input', e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6); });
+$('#j-code').addEventListener('input', e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6); peekTable(e.target.value); });
 [$('#j-code'), $('#j-name')].forEach(el => el.addEventListener('keydown', e => { if (e.key === 'Enter') $('#j-go').click(); }));
 
 /* boot */
@@ -4336,11 +4679,11 @@ $('#j-code').addEventListener('input', e => { e.target.value = e.target.value.to
   if (t.length === 6){
     const rec = store.json(phoneKey(t));
     if (rec && rec.pid){ phoneStart(t, rec.pid, rec.name, QS.get('b') ? +QS.get('b') : rec.b); return; }
-    show('join'); $('#j-code').value = t; $('#j-name').focus(); return;
+    renderJoinPicker(); show('join'); $('#j-code').value = t; peekTable(t); $('#j-name').focus(); return;
   }
   goHome();
 })();
-window.__hgc = { get S(){ return S; }, get phone(){ return Pn.st; }, H, Pn, _t: { allInFx, burst, phoneRender, hostRender, flyChips } };
+window.__hgc = { get S(){ return S; }, get phone(){ return Pn.st; }, H, Pn, _t: { allInFx, burst, phoneRender, hostRender, flyChips, settlePlan, tableSummary, toast } };
 })();
 </script>
 </body>
