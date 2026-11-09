@@ -323,6 +323,8 @@ input{font:inherit}
 .r-who{color:var(--muted);font-size:14px}
 .r-amt{width:100%;margin-top:8px;border:0;background:transparent;text-align:center;font-family:var(--display);font-weight:900;font-size:58px;line-height:1.05;color:var(--brass);font-variant-numeric:tabular-nums;padding:0;outline:none}
 .r-sub{text-align:center;margin:2px 0 12px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.b-owe{margin:6px 0 0;padding:10px 12px;border-radius:12px;background:rgba(214,84,74,.14);box-shadow:inset 0 0 0 1px rgba(214,84,74,.45);font-size:14px;line-height:1.4}
+.b-owe b{color:var(--ivory)}
 .r-row{display:grid;grid-template-columns:52px minmax(0,1fr) 52px;gap:12px;align-items:center}
 input[type=range]{width:100%;height:36px;accent-color:var(--brass);background:transparent}
 .presets{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
@@ -565,6 +567,22 @@ input[type=range]{width:100%;height:36px;accent-color:var(--brass);background:tr
       <button data-p="min">Min</button><button data-p="0.5">½ pot</button><button data-p="0.75">¾ pot</button><button data-p="1">Pot</button><button data-p="all">All in</button>
     </div>
     <div class="sheet-actions"><button class="btn b-fold" data-close>Cancel</button><button class="btn b-raise" id="r-ok">Raise</button></div>
+  </div>
+</div>
+
+<div class="sheet" id="sheet-buy" hidden>
+  <div class="sheet-panel" role="dialog" aria-labelledby="b-title">
+    <div class="grab"></div>
+    <div class="shead"><h2 id="b-title">Buy in</h2><span class="r-who" id="b-who"></span></div>
+    <p class="b-owe" id="b-owe" hidden></p>
+    <input id="b-amt" class="r-amt" inputmode="numeric" pattern="[0-9]*" aria-label="Buy-in amount" autocomplete="off">
+    <p class="r-sub" id="b-sub"></p>
+    <div class="r-row">
+      <button class="round" id="b-minus" aria-label="Less">−</button>
+      <input type="range" id="b-slider" aria-label="Buy-in slider">
+      <button class="round" id="b-plus" aria-label="More">+</button>
+    </div>
+    <div class="sheet-actions"><button class="btn b-fold" data-close>Cancel</button><button class="btn b-raise" id="b-ok">Buy in</button></div>
   </div>
 </div>
 
@@ -3179,17 +3197,41 @@ function newPlayer(name, pid, tag, av){
   return { name, pid, tag, av: freeAvatar(S, av), stack: S.startStack, bought: S.startStack, bet: 0, committed: 0, folded: true, allIn: false, acted: false, locked: false, out: false, last: S.hand ? 'Dealt in next hand' : '', topup: false, leaving: false };
 }
 
+/* ---- buying in ----
+   A buy-in refills toward the starting stack. Anyone who could not cover a 7-2 bounty owes the rest (p.owe),
+   sits out until they buy in at least that much, and the debt goes straight to the winner. */
+const owedOf = p => (p.owe || []).reduce((a, o) => a + o.amt, 0);
+function buyStep(st){ const t = Math.max(1, st.startStack / 20), k = Math.pow(10, Math.floor(Math.log10(t))); return [5, 2, 1].map(m => m * k).find(v => v <= t) || 1; }
+function buyLimits(st, p){
+  const owed = owedOf(p), max = Math.max(0, st.startStack - p.stack) + owed, step = buyStep(st);
+  return { owed, max, step, min: owed > 0 ? owed : Math.min(step, max) };
+}
+function clampBuy(lim, v){ if (!Number.isFinite(v) || v <= lim.min) return lim.min; if (v >= lim.max) return lim.max; v = Math.round(v / lim.step) * lim.step; return Math.max(lim.min, Math.min(lim.max, v)); }
+function creditChips(name, amt){
+  const q = S.players.find(x => x.name === name); if (q){ q.stack += amt; return true; }
+  const g = (S.gone || []).find(x => x.name === name); if (g){ g.stack += amt; return true; }
+  return false;
+}
+function applyBuy(p, amt){
+  p.stack += amt; p.bought += amt;
+  const paid = [];
+  (p.owe || []).forEach(o => { const pay = Math.min(o.amt, p.stack); if (pay > 0 && creditChips(o.name, pay)){ p.stack -= pay; o.amt -= pay; paid.push(`${o.name} ${fmt(pay)}`); } });
+  if (p.owe){ p.owe = p.owe.filter(o => o.amt > 0); if (!p.owe.length) delete p.owe; }
+  return paid;
+}
+function buyNote(p, amt, paid){ return `Bought in ${fmt(amt)}` + (paid.length ? ` · paid ${paid.join(', ')}` : ''); }
 function applyTopUps(){
   S.players.forEach(p => {
     if (!p.topup) return;
-    p.topup = false;
-    const amt = S.startStack - p.stack;
-    if (amt > 0){ p.stack += amt; p.bought += amt; log(`${p.name} topped up ${fmt(amt)}`); }
+    const want = p.topup === true ? Infinity : +p.topup; p.topup = false;
+    const lim = buyLimits(S, p); if (lim.max <= 0) return;
+    const amt = clampBuy(lim, Math.min(want, lim.max)), paid = applyBuy(p, amt);
+    log(`${p.name} bought in ${fmt(amt)}${paid.length ? `, paid ${paid.join(', ')} for the 7-2 bounty` : ''}`);
   });
 }
 function removeSeat(i){
   const p = P(i);
-  S.gone.push({ name: p.name, bought: p.bought, stack: p.stack });
+  S.gone.push({ name: p.name, bought: p.bought, stack: p.stack, ...(p.owe ? { owe: p.owe } : {}) });
   S.players.splice(i, 1);
   if (i <= S.dealer) S.dealer--;
   log(`${p.name} left the table with ${fmt(p.stack)}`);
@@ -3470,7 +3512,7 @@ async function hostCmd(m){
       hostAct(i, kind, to, { rid: m.rid });
       break;
     }
-    case 'topup': if (i >= 0) hostTopUp(i, tag); break;
+    case 'topup': if (i >= 0) hostTopUp(i, tag, Number.isFinite(+m.amt) && m.amt !== null && m.amt !== undefined ? +m.amt : undefined); break;
     case 'leave': if (i >= 0) hostLeave(i, tag); break;
     case 'avatar': {
       if (i < 0) return;
@@ -3506,18 +3548,19 @@ function hostJoin(pid, tag, raw, want){
   hostReply(tag, { type: 'joined', name });
   if (avOk(want) && np.av !== want) hostReply(tag, { type: 'info', msg: `${AVATARS[want].name} was taken, so you're ${AVATARS[np.av].name}. Change it from Menu.` });
 }
-function hostTopUp(i, tag){
-  const p = P(i);
-  if (p.stack >= S.startStack){ if (tag) hostReply(tag, { type: 'error', msg: `You already have the starting stack of ${fmt(S.startStack)}.` }); return; }
-  if (live(S, i)){
-    if (!p.topup){ p.topup = true; log(`${p.name} will top up after this hand`); commit(null, { seq: false }); }
-    if (tag) hostReply(tag, { type: 'info', msg: 'Top-up booked. It lands as soon as this hand ends.' });
+function hostTopUp(i, tag, want){
+  const p = P(i), lim = buyLimits(S, p);
+  if (lim.max <= 0){ if (tag) hostReply(tag, { type: 'error', msg: `You already have the starting stack of ${fmt(S.startStack)}.` }); return; }
+  const amt = want === undefined ? lim.max : clampBuy(lim, Math.round(want));
+  // Mid-hand: a player still in the hand, or one paying off a bounty (the winner may be in this hand), buys in when it ends.
+  if (live(S, i) || (lim.owed > 0 && (S.stage === 'betting' || S.stage === 'showdown'))){
+    if (p.topup !== amt){ p.topup = amt; log(`${p.name} will buy in ${fmt(amt)} after this hand`); commit(null, { seq: false }); }
+    if (tag) hostReply(tag, { type: 'info', msg: `Buy-in of ${fmt(amt)} booked. It lands as soon as this hand ends.` });
     return;
   }
   snap();
-  const amt = S.startStack - p.stack;
-  p.stack += amt; p.bought += amt; p.topup = false; p.last = `Topped up ${fmt(amt)}`;
-  log(`${p.name} topped up ${fmt(amt)}`);
+  const paid = applyBuy(p, amt); p.topup = false; p.last = buyNote(p, amt, paid);
+  log(`${p.name} bought in ${fmt(amt)}${paid.length ? `, paid ${paid.join(', ')} for the 7-2 bounty` : ''}`);
   refreshOver();
   commit({ kind: 'topup', tag: p.tag, amount: amt }, { seq: false });
 }
@@ -3544,24 +3587,26 @@ function hostAct(i, kind, to, opts = {}){
   commit({ kind: r.fx, tag, name, moved: r.moved, after: r.after }, { foldRect });
   if (S.stage === 'done'){ AD.paused = false; autoDeal(true); }
 }
-/* 7-2 offsuit bounty: the winner showed 7-2 of different suits, so every other player dealt into that hand pays the bounty (or what they have left). */
+/* 7-2 offsuit bounty: the winner showed 7-2 of different suits, so every other player dealt into that hand pays the bounty.
+   Anyone short pays what they have and owes the rest, which they pay from their next buy-in. */
 function hostBounty(tag){
   if (!S || S.stage !== 'done' || !S.bounty || S.bountyHand === S.hand || !(S.lastWin || []).includes(tag)) return;
   const w = S.players.find(p => p.tag === tag); if (!w) return;
   snap();
-  let total = 0; const payers = [];
+  let total = 0, owedTotal = 0; const payers = [], owers = [];
   S.players.forEach(p => {
     if (p === w || !(S.lastDealt || []).includes(p.tag)) return;
-    const amt = Math.min(S.bounty, p.stack);
+    const amt = Math.min(S.bounty, p.stack), short = S.bounty - amt;
     if (amt > 0){ p.stack -= amt; total += amt; payers.push(p.tag); }
+    if (short > 0){ (p.owe = p.owe || []).push({ name: w.name, tag: w.tag, amt: short }); owedTotal += short; owers.push(p.tag); p.last = `Owes ${w.name} ${fmt(short)}`; }
   });
   w.stack += total; S.bountyHand = S.hand;
   w.last = (/^Won/.test(w.last || '') ? w.last + ' · ' : '') + `7-2 +${fmt(total)}`;
   S.result = (S.result ? S.result + ' · ' : '') + `7-2 offsuit bounty ${w.name} +${fmt(total)}`;
   const h = S.hands && S.hands[S.hands.length - 1]; if (h && h.n === S.hand) h.bounty = [w.name, total];
-  log(`${w.name} shows 7-2 offsuit and collects ${fmt(total)}`);
+  log(`${w.name} shows 7-2 offsuit and collects ${fmt(total)}${owedTotal ? `, ${fmt(owedTotal)} more owed` : ''}`);
   if (funded() < 2) S.stage = 'over';
-  commit({ kind: 'bounty', tag, name: w.name, amount: total, payers }, { seq: false });
+  commit({ kind: 'bounty', tag, name: w.name, amount: total, payers, owers }, { seq: false });
   autoDeal(true);
 }
 /* After a hand is paid out the next one deals itself. Opening a sheet holds the deal; Pause stops it. */
@@ -3630,10 +3675,11 @@ function seatStatus(st, i, me){
   const p = st.players[i], inHand = st.stage === 'betting' || st.stage === 'showdown';
   if (p.leaving) return 'Leaving after this hand';
   if (inHand && p.out) return 'Out of chips';
-  if (!inHand && p.stack === 0) return p.topup ? 'Top-up booked' : 'Out of chips · can top up';
+  if (p.owe && p.owe.length && p.stack === 0) return p.topup ? 'Buy-in booked' : `Owes ${fmt(owedOf(p))} · must buy in`;
+  if (!inHand && p.stack === 0) return p.topup ? 'Buy-in booked' : 'Out of chips · can buy in';
   if (inHand && p.folded && !p.committed && !p.last) return 'Dealt in next hand';
   if (st.stage === 'betting' && i === st.toAct) return me ? 'Your turn' : 'To act';
-  return (p.last || (inHand && p.allIn ? 'All in' : '')) + (p.topup ? ' · top-up booked' : '');
+  return (p.last || (inHand && p.allIn ? 'All in' : '')) + (p.topup ? ' · buy-in booked' : '');
 }
 function seatClass(st, i){
   const p = st.players[i], inHand = st.stage === 'betting' || st.stage === 'showdown';
@@ -3879,7 +3925,7 @@ function hostRenderDock(){
     btns = `<button class="btn b-raise" data-h="showdown">Choose winners</button>`;
   } else if (S.stage === 'over'){
     const left = S.players.filter(p => p.stack > 0);
-    msg = `<b>${left.length === 1 ? esc(left[0].name) + ' has every chip' : 'Waiting for chips'}</b><span>Busted players can top up from their phones, or you can top them up by tapping their seat.</span>`;
+    msg = `<b>${left.length === 1 ? esc(left[0].name) + ' has every chip' : 'Waiting for chips'}</b><span>Busted players can buy in from their phones, or you can buy them in by tapping their seat.</span>`;
     btns = `<button class="btn b-raise" data-h="deal"${S.players.filter(p => p.stack > 0).length < 2 ? ' disabled' : ''}>Deal hand ${S.hand + 1}</button>`;
   } else {
     cls = ' result';
@@ -3955,14 +4001,15 @@ function renderSeat(){
   let h = `<p class="hint">Stack ${fmt(p.stack)} · bought ${fmt(p.bought)} · ${isOn(p) ? 'phone connected' : 'phone not connected'}</p>`;
   if (turn) h += `<div class="m-sec"><h3>Act for ${esc(p.name)}</h3>${actionButtons(S, i, 'seat')}</div>`;
   h += `<div class="seatacts">`;
-  if (p.stack < S.startStack) h += `<button class="btn-sec" data-s="topup">${live(S, i) ? 'Book top-up for after this hand' : `Top up ${fmt(S.startStack - p.stack)} to ${fmt(S.startStack)}`}</button>`;
+  if (p.owe && p.owe.length) h += `<p class="hint">Owes ${p.owe.map(o => `${esc(o.name)} ${fmt(o.amt)}`).join(', ')} for the 7-2 bounty. Sits out until they buy in.</p>`;
+  if (buyLimits(S, p).max > 0) h += `<button class="btn-sec" data-s="topup"${p.topup ? ' disabled' : ''}>${p.topup ? `Buy-in of ${fmt(+p.topup || 0)} booked` : live(S, i) ? 'Book a buy-in for after this hand' : 'Buy in'}</button>`;
   h += `<button class="btn-danger" data-s="remove">${inHand ? 'Remove after this hand' : 'Remove from table'}</button></div>`;
   $('#seat-body').innerHTML = h;
 }
 $('#seat-body').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b || b.disabled) return;
   const i = seatOpen;
-  if (b.dataset.s === 'topup'){ hostTopUp(i, null); renderSeat(); }
+  if (b.dataset.s === 'topup'){ closeSheets(); setTimeout(() => openBuy(S, i, amt => hostTopUp(i, null, amt), false), 240); }
   else if (b.dataset.s === 'remove'){
     if (!b.classList.contains('armed')){ b.classList.add('armed'); b.textContent = 'Tap again to confirm'; return; }
     hostLeave(i, null); closeSheets();
@@ -4024,7 +4071,7 @@ function renderHostMenu(){
     ${S.players.length < S.table.max ? `<div class="m-sec"><h3>Add a player without a phone</h3>
       <div class="add-row"><input class="txt" id="m-add" maxlength="14" placeholder="Name" autocomplete="off"><button class="btn-sec" data-m="add">Add seat</button></div>
       <p class="hint">You act for them by tapping their seat. If they later join from a phone with the same name, the seat moves to their phone.</p></div>` : ''}
-    <div class="m-sec"><h3>Settle up</h3><p class="hint" style="margin:0 0 10px">Starting stack ${fmt(S.startStack)}. Top-ups only refill to that amount.${between ? '' : ' Figures settle when this hand ends.'}</p>
+    <div class="m-sec"><h3>Settle up</h3><p class="hint" style="margin:0 0 10px">Starting stack ${fmt(S.startStack)}. Buy-ins only refill to that amount.${between ? '' : ' Figures settle when this hand ends.'}</p>
       <div class="tbl-wrap"><table class="settle"><thead><tr><th>Player</th><th class="num">Bought</th><th class="num">Chips</th><th class="num">Net</th></tr></thead><tbody>${rows || '<tr><td colspan="4">Nobody yet</td></tr>'}</tbody></table></div></div>
     <div class="m-sec"><h3>Move to another table</h3>
       <p class="hint" style="margin:0 0 8px">Saves every seat, stack, buy-in and hand so far to a file. On the new tablet, choose Create a table → Import file. Players rejoin there with the same name and keep their chips.${between ? '' : ' Available once this hand is paid out.'}</p>
@@ -4044,7 +4091,7 @@ $('#menu-body').addEventListener('click', e => {
   const m = b.dataset.m;
   if (m === 'sound'){ Snd.on = !Snd.on; store.set('hgc-sound', Snd.on ? 'on' : 'off'); b.setAttribute('aria-checked', Snd.on); if (Snd.on){ Snd.init(); Snd.chips(3); } return; }
   if (m === 'pleave'){ phoneLeave(b); return; }
-  if (m === 'ptopup'){ phoneTopUp(); return; }
+  if (m === 'ptopup'){ closeSheets(); setTimeout(() => openBuy(Pn.st, phoneSeat(), amt => phoneTopUp(amt)), 240); return; }
   if (!S) return;
   if (m === 'blinds'){
     const bb = toInt($('#m-bb').value, 0), sb = $('#m-sb') ? toInt($('#m-sb').value, 0) : Math.min(S.sb, bb || S.sb), msg = $('#m-msg');
@@ -4110,7 +4157,7 @@ function openRaise(st, i, onOk){
 function clampRaise(v){ if (!Number.isFinite(v) || v <= R.min) return R.min; if (v >= R.max) return R.max; v = Math.round(v / R.unit) * R.unit; return Math.max(R.min, Math.min(R.max, v)); }
 function setRaise(v, keepText, silent){
   const prev = R.val; R.val = clampRaise(v);
-  if (!keepText) $('#r-amt').value = R.val;
+  if (!keepText) $('#r-amt').value = fmt(R.val);
   $('#r-slider').value = R.val;
   const p = R.st.players[R.i], add = R.val - p.bet;
   $('#r-sub').textContent = `${fmt(add)} from ${p.name}'s stack · ${fmt(p.stack - add)} left`;
@@ -4135,6 +4182,42 @@ $('#r-ok').addEventListener('click', () => {
   const v = clampRaise(toInt($('#r-amt').value, R.val));
   const cb = R.onOk; closeSheets();
   cb(v >= R.max ? 'allin' : 'raise', v);
+});
+
+/* Unpaid 7-2 bounties carried over when a table file is imported. */
+function oweOf(p){ const o = Array.isArray(p && p.owe) ? p.owe.map(x => ({ name: cleanName(x && x.name), tag: String((x && x.tag) || ''), amt: Math.max(0, Math.floor(+(x && x.amt) || 0)) })).filter(x => x.name && x.amt > 0) : []; return o.length ? { owe: o } : {}; }
+/* Buy-in sheet: pick the amount with the slider, then confirm. Defaults to the starting stack. */
+let B = null;
+function openBuy(st, i, onOk, self = true){
+  const p = st && st.players[i]; if (!p) return;
+  const lim = buyLimits(st, p); if (lim.max <= 0) return;
+  B = { st, i, ...lim, val: 0, onOk, self };
+  $('#b-who').textContent = p.name;
+  const owe = p.owe || [];
+  $('#b-owe').hidden = !owe.length;
+  $('#b-owe').innerHTML = owe.length ? `${self ? 'You owe' : esc(p.name) + ' owes'} ${owe.map(o => `<b>${esc(o.name)} ${fmt(o.amt)}</b>`).join(' and ')} for the 7-2 bounty. ${self ? 'Buy in' : 'They need to buy in'} at least ${fmt(lim.owed)} to pay it${self ? ' and play on' : ''}.` : '';
+  const sl = $('#b-slider'); sl.min = lim.min; sl.max = lim.max; sl.step = 1; sl.disabled = lim.min >= lim.max;
+  setBuy(Math.max(lim.min, Math.min(lim.max, st.startStack)), false, true);
+  openSheet('#sheet-buy');
+}
+function setBuy(v, keepText, silent){
+  const prev = B.val; B.val = clampBuy(B, v);
+  if (!keepText) $('#b-amt').value = fmt(B.val);
+  $('#b-slider').value = B.val;
+  const p = B.st.players[B.i], after = p.stack + B.val - Math.min(B.owed, B.val);
+  $('#b-sub').textContent = (B.owed ? `${fmt(B.owed)} pays the bounty · ` : '') + `${B.self ? "you'll" : p.name + ' will'} have ${fmt(after)} chips` + (live(B.st, B.i) || (B.owed && (B.st.stage === 'betting' || B.st.stage === 'showdown')) ? ' after this hand' : '');
+  $('#b-ok').textContent = `Buy in ${fmt(B.val)}`;
+  if (prev !== B.val && !silent) Snd.tick();
+}
+$('#b-slider').addEventListener('input', e => setBuy(+e.target.value));
+$('#b-amt').addEventListener('input', e => setBuy(toInt(e.target.value, B.min), true));
+$('#b-amt').addEventListener('change', e => setBuy(toInt(e.target.value, B.min)));
+$('#b-amt').addEventListener('focus', e => e.target.select());
+$('#b-minus').addEventListener('click', () => setBuy(B.val === B.max ? Math.floor((B.max - 1) / B.step) * B.step : B.val - B.step));
+$('#b-plus').addEventListener('click', () => setBuy(B.val + B.step));
+$('#b-ok').addEventListener('click', () => {
+  const v = clampBuy(B, toInt($('#b-amt').value, B.val));
+  const cb = B.onOk; closeSheets(); cb(v);
 });
 
 /* ================= phone (player) ================= */
@@ -4282,7 +4365,7 @@ function phoneFx(fx){
   else if (fx.kind === 'allin') { Snd.allIn(); allInFx(fx.name, $('#p-me')); }
   else if (mineAct || (fx.tag === Pn.tag && fx.kind === 'topup')) playOwn(fx.kind);   // the table acted for you
   else if (fx.kind === 'deal') Snd.shuffle();
-  else if (fx.kind === 'bounty'){ if (fx.tag === Pn.tag) Snd.win(); else if ((fx.payers || []).includes(Pn.tag)){ Snd.chips(3); toast(`${fx.name} showed 7-2 offsuit. You paid the bounty.`); } }
+  else if (fx.kind === 'bounty'){ if (fx.tag === Pn.tag) Snd.win(); else if ((fx.owers || []).includes(Pn.tag)) Snd.chips(3); else if ((fx.payers || []).includes(Pn.tag)){ Snd.chips(3); toast(`${fx.name} showed 7-2 offsuit. You paid the bounty.`); } }
   else if (fx.kind === 'win' && (fx.tags || []).includes(Pn.tag)) Snd.win();
   if (fx.after && fx.after.kind === 'win' && (fx.after.tags || []).includes(Pn.tag)) setTimeout(() => Snd.win(), 400);
 }
@@ -4343,15 +4426,20 @@ function phoneRender(){
     d.innerHTML = `<div class="actor"><div class="actor-name">${head}</div><div class="actor-meta">${myTurn ? (toCall ? `<b>${fmt(Math.min(toCall, p.stack))}</b> to call` : 'Nothing to call') : 'Buttons unlock on your turn'}</div></div>` +
       (p.allIn ? '<p class="dock-note">You are all in. Sit back and watch.</p>' : actionButtons(st, me, 'phone', !myTurn || !!Pn.pending || !Pn.connected));
   } else {
-    const canTop = p.stack < st.startStack;
-    const msg = st.stage === 'showdown' ? 'Showdown. The table device picks the winner.' : st.stage === 'betting' ? (p.out ? 'Out of chips this hand.' : p.last === 'Folded' ? 'You folded this hand.' : "You're dealt in from the next hand.") : st.stage === 'lobby' ? 'Waiting for the table to deal.' : 'Waiting for the next deal.';
+    const canTop = buyLimits(st, p).max > 0, owed = owedOf(p);
+    const msg = owed ? `You owe ${p.owe.map(o => `${esc(o.name)} ${fmt(o.amt)}`).join(' and ')} for the 7-2 bounty. Buy in to pay it and play on.` : st.stage === 'showdown' ? 'Showdown. The table device picks the winner.' : st.stage === 'betting' ? (p.out ? 'Out of chips this hand.' : p.last === 'Folded' ? 'You folded this hand.' : "You're dealt in from the next hand.") : st.stage === 'lobby' ? 'Waiting for the table to deal.' : 'Waiting for the next deal.';
     d.innerHTML = `<div class="actor"><div class="actor-name">${st.stage === 'betting' || st.stage === 'showdown' ? 'Hand in progress' : 'Between hands'}</div><div class="actor-meta">${msg}</div></div>` +
-      (canTop ? `<div class="btns one"><button class="btn b-raise" data-p="topup"${p.topup ? ' disabled' : ''}>${p.topup ? 'Top-up booked' : `Top up ${fmt(st.startStack - p.stack)} to ${fmt(st.startStack)}`}</button></div>` : '');
+      (canTop ? `<div class="btns one"><button class="btn b-raise" data-p="topup"${p.topup ? ' disabled' : ''}>${p.topup ? `Buy-in of ${fmt(+p.topup || 0)} booked` : owed ? 'Buy in to pay' : 'Buy in'}</button></div>` : '');
+    // Owing a bounty: bring up the buy-in sheet once, so it can't be missed.
+    if (owed && !p.topup){
+      const key = Pn.code + ':' + JSON.stringify(p.owe);
+      if (Pn.owePrompt !== key && $$('.sheet').every(x => x.hidden)){ Pn.owePrompt = key; openBuy(st, me, amt => phoneTopUp(amt)); }
+    }
   }
 }
 $('#p-dock').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b || b.disabled) return;
-  if (b.dataset.p === 'topup') return phoneTopUp();
+  if (b.dataset.p === 'topup') return openBuy(Pn.st, phoneSeat(), amt => phoneTopUp(amt));
   if (b.dataset.p === 'home') return phoneQuit();
   const kind = b.dataset.act; if (!kind) return;
   const st = Pn.st, me = phoneSeat();
@@ -4373,9 +4461,9 @@ function phoneSend(kind, to){
   const sent = Pn.pending;
   setTimeout(() => { if (Pn.pending === sent){ Pn.pending = null; phoneRender(); toast('No answer from the table. Check the table device and try again.'); } }, 12000);
 }
-function phoneTopUp(){
+function phoneTopUp(amt){
   if (!Pn.client || !Pn.connected) return toast('Not connected to the table.');
-  Pn.client.publish(topic(Pn.code, 'cmd'), JSON.stringify({ type: 'topup', pid: Pn.pid }), { qos: 1 });
+  Pn.client.publish(topic(Pn.code, 'cmd'), JSON.stringify({ type: 'topup', pid: Pn.pid, amt }), { qos: 1 });
   closeSheets();
 }
 function phoneLeave(b){
@@ -4412,8 +4500,8 @@ $('#p-menu').addEventListener('click', () => {
     <div class="m-sec m-row"><div><h3>Sound effects</h3><p class="hint">No sound? Turn the volume up and check the silent switch.</p></div>
       <button class="switch" data-m="sound" role="switch" aria-checked="${Snd.on}" aria-label="Sound effects"><span></span></button></div>
     ${p ? `<div class="m-sec"><h3>Your avatar</h3><div class="avpick" id="p-avpick">${avPickHTML(p.av, Object.fromEntries(st.players.filter(q => q !== p && avOk(q.av)).map(q => [q.av, q.name])))}</div></div>` : ''}
-    ${p ? `<div class="m-sec"><h3>Top up</h3><p class="hint" style="margin:0 0 8px">You can refill to the starting stack of ${fmt(st.startStack)} between hands. ${p.stack >= st.startStack ? 'You are already at the starting stack.' : inHand ? 'If you book it now, it lands when this hand ends.' : ''}</p>
-      <button class="btn-sec" data-m="ptopup"${p.stack >= st.startStack || p.topup ? ' disabled' : ''}>${p.topup ? 'Top-up booked' : `Top up ${fmt(Math.max(0, st.startStack - p.stack))}`}</button></div>` : ''}
+    ${p ? `<div class="m-sec"><h3>Buy in</h3><p class="hint" style="margin:0 0 8px">${owedOf(p) ? `You owe ${p.owe.map(o => `${esc(o.name)} ${fmt(o.amt)}`).join(' and ')} for the 7-2 bounty, paid from your buy-in. ` : ''}You can buy chips up to the starting stack of ${fmt(st.startStack)}. ${buyLimits(st, p).max <= 0 ? 'You are already at the starting stack.' : inHand ? 'If you book it now, it lands when this hand ends.' : ''}</p>
+      <button class="btn-sec" data-m="ptopup"${buyLimits(st, p).max <= 0 || p.topup ? ' disabled' : ''}>${p.topup ? `Buy-in of ${fmt(+p.topup || 0)} booked` : 'Buy in'}</button></div>` : ''}
     <div class="m-sec"><h3>${esc(st ? st.table.label : 'Table')} · ${esc(Pn.code)}</h3>
       <button class="btn-danger" data-m="pleave">${p ? (inHand ? 'Leave after this hand' : 'Leave table') : 'Back to start'}</button>
       <p class="hint">${p ? `You leave with ${fmt(p.stack)} chips. Your result stays in the table's settle-up.` : ''}</p></div>`;
@@ -4509,7 +4597,7 @@ async function importTable(src){
     const name = cleanName(p.name);
     if (!name || players.some(q => q.name.toLowerCase() === name.toLowerCase()) || players.length >= 10) continue;
     const pid = 'moved-' + makeId(16);
-    players.push({ name, pid, av: Number.isInteger(p.av) ? p.av : -1, tag: await tagOf(pid), stack: n(p.stack) + n(p.committed), bought: n(p.bought), bet: 0, committed: 0, folded: true, allIn: false, acted: false, locked: false, out: false, last: 'Rejoin with the same name', topup: false, leaving: false });
+    players.push({ name, pid, av: Number.isInteger(p.av) ? p.av : -1, tag: await tagOf(pid), stack: n(p.stack) + n(p.committed), bought: n(p.bought), bet: 0, committed: 0, folded: true, allIn: false, acted: false, locked: false, out: false, last: 'Rejoin with the same name', topup: false, leaving: false, ...oweOf(p) });
   }
   if (!players.length) throw new Error('That file has no players in it.');
   const count = (toInt(store.get('hgc-table-count'), 0) || 0) + 1;
@@ -4517,7 +4605,7 @@ async function importTable(src){
   const code = makeId(6), from = src.table ? `${src.table.label || 'a table'}${src.table.code ? ' (' + src.table.code + ')' : ''}` : 'another table';
   const sb = n(src.sb), bb = n(src.bb);
   S = { table: { code, label: `Table ${count}`, max: Math.min(10, Math.max(players.length, n(src.table && src.table.max) || 10, 2)), created: Date.now(), movedFrom: from },
-        players, gone: Array.isArray(src.gone) ? src.gone.map(g => ({ name: cleanName(g.name), bought: n(g.bought), stack: n(g.stack) })).filter(g => g.name) : [],
+        players, gone: Array.isArray(src.gone) ? src.gone.map(g => ({ name: cleanName(g.name), bought: n(g.bought), stack: n(g.stack), ...oweOf(g) })).filter(g => g.name) : [],
         startStack: n(src.startStack), sb, bb, handSB: sb, handBB: bb,
         dealer: Number.isInteger(src.dealer) && src.dealer >= -1 && src.dealer < players.length ? src.dealer : -1, sbIdx: -1, bbIdx: -1,
         street: 0, currentBet: 0, minRaise: bb, toAct: -1, hand: n(src.hand), stage: 'lobby', result: '', resultSub: '',
@@ -4562,6 +4650,11 @@ function tableSummary(st){
   const won = {}; let big = null;
   (st.hands || []).forEach(h => { h.win.forEach(([n]) => { won[n] = (won[n] || 0) + 1; }); if (!big || h.pot > big.pot) big = h; });
   rows.forEach(r => { r.net = r.chips - r.bought; r.won = won[r.name] || 0; });
+  // a 7-2 bounty nobody bought in to pay still counts: it moves from the debtor's result to the winner's
+  st.players.concat(st.gone || []).forEach(p => (p.owe || []).forEach(o => {
+    const a = rows.find(r => r.name === p.name), b = rows.find(r => r.name === o.name);
+    if (a && b && o.amt > 0){ a.net -= o.amt; b.net += o.amt; }
+  }));
   rows.sort((a, b) => b.net - a.net);
   return { rows, big, hands: (st.hands || []).length || st.hand };
 }
@@ -4714,7 +4807,7 @@ function syncBlindFields(){
   $('#c-money').className = single ? 'grid2' : 'grid3';
   $('#c-bb-lbl').textContent = single ? 'Blind' : 'Big blind';
   $('#c-blindhint').textContent = (single ? 'With fewer than 4 players there is one blind, posted by the player left of the button.'
-    : 'Small and big blinds apply with 4 or more players. If fewer are seated, only the big blind is posted.') + ' Players can top up between hands, but only back to the starting stack.';
+    : 'Small and big blinds apply with 4 or more players. If fewer are seated, only the big blind is posted.') + ' Players can buy in again between hands, but only back to the starting stack.';
 }
 $('#v-create').addEventListener('click', e => { const b = e.target.closest('[data-max]'); if (!b) return; const o = $('#c-max'); o.textContent = Math.max(2, Math.min(10, +o.textContent + +b.dataset.max)); syncBlindFields(); });
 syncBlindFields();
