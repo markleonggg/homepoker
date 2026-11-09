@@ -121,8 +121,17 @@ input{font:inherit}
 .mstat b{font-family:var(--display);font-weight:800;font-size:22px;line-height:1;letter-spacing:.02em;color:var(--ivory);white-space:nowrap}
 .mstat b.gold{color:var(--brass)}
 .mstat b i{font-style:normal;color:var(--muted);font-weight:600;margin:0 1px}
-@media (max-width:900px){ .hbar{grid-template-columns:1fr auto} .hbar .meta{grid-column:1/-1;grid-row:2;justify-self:stretch;justify-content:space-around} .mstat{padding:6px 10px;min-width:0} }
+/* Narrower screens: the buttons drop below the title when both don't fit on one line, and the stats get their own row. */
+@media (max-width:900px){
+  .hbar{display:flex;flex-wrap:wrap;justify-content:space-between;row-gap:8px}
+  .hbar .title{flex:0 1 auto;flex-wrap:wrap;row-gap:6px}
+  .hbar .acts{margin-left:auto}
+  .hbar .meta{order:3;flex:1 1 100%;justify-content:space-around}
+  .mstat{padding:6px 10px;min-width:0}
+}
 .hbar .acts{display:flex;gap:8px}
+.watchers{display:inline-flex;align-items:center;gap:5px;color:var(--ivory);white-space:nowrap}
+.watchers svg{width:13px;height:13px;flex:none}
 .arena{position:relative;min-height:0}
 .street{font-family:var(--display);font-weight:600;font-size:14px;letter-spacing:.24em;text-transform:uppercase;color:var(--muted)}
 .pot{display:flex;align-items:baseline;gap:8px}
@@ -492,7 +501,7 @@ input[type=range]{width:100%;height:36px;accent-color:var(--brass);background:tr
 <section class="view wide" id="v-host" hidden>
   <div class="host">
     <div class="hbar">
-      <div class="title"><b id="h-label">Table 1</b><span class="codepill" id="h-code">------</span><span class="dot" id="h-net" title="Connection"></span><span class="viewer-tag" id="h-viewtag" hidden>Watching</span></div>
+      <div class="title"><b id="h-label">Table 1</b><span class="codepill" id="h-code">------</span><span class="dot" id="h-net" title="Connection"></span><span class="viewer-tag" id="h-viewtag" hidden>Watching</span><span class="viewer-tag watchers" id="h-watchers" title="Screens watching this table" hidden></span></div>
       <div class="meta" id="h-meta"></div>
       <div class="acts">
         <button class="ghost" id="h-invite">Invite</button>
@@ -3394,7 +3403,7 @@ function engineAward(){
 }
 
 /* ================= table device (host) ================= */
-const H = { code: null, client: null, broker: 0, online: {}, pubN: 0, fxN: 0, hist: [], last: { v: 0 }, connected: false };
+const H = { code: null, client: null, broker: 0, online: {}, viewers: {}, pubN: 0, fxN: 0, hist: [], last: { v: 0 }, connected: false };
 let VIEW = false;                       // true when this screen only watches a table
 const isOn = p => VIEW ? !!p.on : !!H.online[p.tag];
 const hostKey = code => 'hgc-host:' + code;
@@ -3454,13 +3463,14 @@ function hostConnect(idx, allowFailover){
     clientId: 'hgc_h_' + code, keepalive: 20, reconnectPeriod: 2000, connectTimeout: 8000, clean: false,
     will: { topic: topic(code, 'host'), payload: '0', qos: 1, retain: true }
   });
-  H.client = c; H.connected = false;
+  H.client = c; H.connected = false; H.viewers = {}; renderWatchers();
   let gotOnline = false;
   const failover = allowFailover && BROKERS.length > 1 ? setTimeout(() => { if (!gotOnline && H.client === c && S.players.length === 0) hostConnect(idx + 1, false); }, 9000) : 0;
   c.on('connect', () => {
     if (H.client !== c) return;
     gotOnline = true; clearTimeout(failover); H.connected = true; netDot('#h-net', 'on'); banner('');
-    c.subscribe([topic(code, 'cmd'), topic(code, 'presence/+')], { qos: 1 });
+    H.viewers = {}; renderWatchers();          // the relay resends every screen still watching when we subscribe
+    c.subscribe([topic(code, 'cmd'), topic(code, 'presence/+'), topic(code, 'watch/+')], { qos: 1 });
     c.publish(topic(code, 'host'), '1', { qos: 1, retain: true });
     hostSave(); hostPublish(); hostRender();
   });
@@ -3473,6 +3483,12 @@ function hostConnect(idx, allowFailover){
       const tag = t.slice(t.lastIndexOf('/') + 1);
       const on = s === '1';
       if (!!H.online[tag] !== on){ H.online[tag] = on; hostPublish(); if (S && S.stage !== 'lobby') hostRenderSeats(); else hostRender(); }
+      return;
+    }
+    if (t.indexOf('/watch/') > 0){
+      const id = t.slice(t.lastIndexOf('/') + 1);
+      if (s === '1') H.viewers[id] = 1; else delete H.viewers[id];
+      renderWatchers();
       return;
     }
     let m; try { m = JSON.parse(s); } catch(e){ return; }
@@ -3673,6 +3689,15 @@ function hostClose(){
 
 /* ---- host rendering ---- */
 function netDot(sel, st){ const d = $(sel); if (d){ d.className = 'dot ' + st; d.title = st === 'on' ? 'Connected' : 'Offline'; } }
+/* How many other screens are watching this table (only shown on the table device). */
+const EYE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5C6.5 5 2.7 9.4 1.5 12c1.2 2.6 5 7 10.5 7s9.3-4.4 10.5-7C21.3 9.4 17.5 5 12 5z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg>';
+function renderWatchers(){
+  const el = $('#h-watchers'); if (!el) return;
+  const n = VIEW ? 0 : Object.keys(H.viewers).length;
+  el.hidden = !n;
+  const h = n ? `${EYE}${n} watching` : '';
+  if (el.__h !== h){ el.innerHTML = h; el.__h = h; }
+}
 function seatStatus(st, i, me){ return capParts(seatStatus0(st, i, me)); }
 function seatStatus0(st, i, me){
   const p = st.players[i], inHand = st.stage === 'betting' || st.stage === 'showdown';
@@ -3719,6 +3744,7 @@ function hostRender(){
   if ($('#h-meta').__h !== metaHTML){ $('#h-meta').innerHTML = metaHTML; $('#h-meta').__h = metaHTML; }
   $('#h-undo').disabled = !H.hist.length;
   $('#h-undo').hidden = VIEW; $('#h-menu').hidden = VIEW; $('#h-leave').hidden = !VIEW; $('#h-viewtag').hidden = !VIEW;
+  renderWatchers();
   const lobby = S.stage === 'lobby';
   const wasHidden = $('#h-felt').hidden;
   $('#h-lobby').hidden = !lobby; $('#h-felt').hidden = lobby; $('#h-seats').hidden = lobby;
@@ -4516,11 +4542,13 @@ $('#p-menu').addEventListener('click', () => {
 });
 
 /* ================= viewer (watch a table) ================= */
-const Wt = { client: null, lastFx: null, lastV: 0, hostOn: true, connected: false, tried: 0 };
+/* Each watching screen keeps a retained "watch/<id>" flag on the relay; it is cleared when the screen stops
+   watching, and by the relay itself (the will message) if the screen drops off, so the table can count viewers. */
+const Wt = { client: null, lastFx: null, lastV: 0, hostOn: true, connected: false, tried: 0, wid: '' };
 function watchStart(code, b){
   VIEW = true; S = null;
-  Object.assign(H, { code, broker: b || 0, hist: [], online: {}, last: { v: 0 }, client: null });
-  Object.assign(Wt, { lastFx: null, lastV: 0, hostOn: true, tried: 0 });
+  Object.assign(H, { code, broker: b || 0, hist: [], online: {}, viewers: {}, last: { v: 0 }, client: null });
+  Object.assign(Wt, { lastFx: null, lastV: 0, hostOn: true, tried: 0, wid: makeId(10) });
   store.set('hgc-watch-last', JSON.stringify({ code, b: b || 0 }));
   show('host');
   $('#h-label').textContent = 'Table'; $('#h-code').textContent = code; $('#h-meta').innerHTML = ''; $('#h-meta').__h = '';
@@ -4533,14 +4561,22 @@ function watchStart(code, b){
 function watchConnect(idx){
   if (Wt.client){ try { Wt.client.end(true); } catch(e){} }
   H.broker = idx % BROKERS.length;
-  const code = H.code, c = mqtt.connect(BROKERS[H.broker], { clientId: 'hgc_w_' + makeId(10), keepalive: 20, reconnectPeriod: 2000, connectTimeout: 8000, clean: true });
+  const code = H.code, wt = topic(code, 'watch/' + Wt.wid), c = mqtt.connect(BROKERS[H.broker], {
+    clientId: 'hgc_w_' + makeId(10), keepalive: 20, reconnectPeriod: 2000, connectTimeout: 8000, clean: true,
+    will: { topic: wt, payload: '', qos: 1, retain: true }
+  });
   Wt.client = c;
   const probe = setTimeout(() => {
     if (Wt.client !== c || S) return;
     if (Wt.tried + 1 < BROKERS.length){ Wt.tried++; watchConnect(idx + 1); }
     else $('#h-dock').innerHTML = '<div class="msg"><b>No table found</b><span>Check the code on the table device.</span></div><div class="btns"><button class="btn b-raise" data-h="home">Back to start</button></div>';
   }, 7000);
-  c.on('connect', () => { if (Wt.client !== c) return; Wt.connected = true; netDot('#h-net', 'on'); watchBanner(); c.subscribe([topic(code, 'state'), topic(code, 'host')], { qos: 1 }); });
+  c.on('connect', () => {
+    if (Wt.client !== c) return;
+    Wt.connected = true; netDot('#h-net', 'on'); watchBanner();
+    c.subscribe([topic(code, 'state'), topic(code, 'host')], { qos: 1 });
+    c.publish(wt, '1', { qos: 1, retain: true });
+  });
   const down = () => { if (Wt.client !== c) return; Wt.connected = false; netDot('#h-net', 'off'); watchBanner(); };
   c.on('close', down); c.on('offline', down); c.on('error', () => {});
   c.on('message', (t, buf) => {
@@ -4564,7 +4600,8 @@ function watchBanner(){
   else banner('');
 }
 function watchStop(){
-  if (Wt.client){ try { Wt.client.end(); } catch(e){} Wt.client = null; }
+  // clear our flag first: a clean disconnect doesn't fire the will
+  if (Wt.client){ try { Wt.client.publish(topic(H.code, 'watch/' + Wt.wid), '', { qos: 1, retain: true }); Wt.client.end(); } catch(e){} Wt.client = null; }
   VIEW = false; S = null; banner('');
   store.del('hgc-watch-last');
   try { const u = new URL(location.href); u.searchParams.delete('w'); history.replaceState(null, '', u.toString()); } catch(e){}
