@@ -144,7 +144,7 @@ input{font:inherit}
 .stage .logo{position:absolute;left:50%;top:50%;width:calc(var(--u)*31);height:calc(var(--u)*31);transform:translate(-50%,-50%);border-radius:50%;
   display:grid;place-items:center;color:rgba(244,236,216,.06);pointer-events:none}
 .stage .logo b{font-size:calc(var(--u)*17);line-height:1;margin-top:calc(var(--u)*-3)}
-.stage .logo span{position:absolute;bottom:calc(var(--u)*2.6);font-family:var(--display);font-weight:800;font-size:calc(var(--u)*2.1);letter-spacing:.35em;text-indent:.35em;color:rgba(244,236,216,.1)}
+.stage .logo span{transition:opacity .3s;position:absolute;bottom:calc(var(--u)*2.6);font-family:var(--display);font-weight:800;font-size:calc(var(--u)*2.1);letter-spacing:.35em;text-indent:.35em;color:rgba(244,236,216,.1)}
 .stage .center{position:absolute;left:50%;top:calc(50% + var(--dy,0px));transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:calc(var(--u)*1);text-align:center;width:calc(var(--rx)*1.1);pointer-events:none}
 .stage .street{font-size:max(11px,calc(var(--u)*1.3))}
 .stage .pot{display:inline-flex;white-space:nowrap;align-items:center;gap:calc(var(--u)*.8);padding:calc(var(--u)*.5) calc(var(--u)*1.6) calc(var(--u)*.5) calc(var(--u)*.6);border-radius:999px;background:rgba(0,0,0,.38);box-shadow:inset 0 0 0 1px rgba(224,177,85,.25)}
@@ -508,7 +508,7 @@ input[type=range]{width:100%;height:36px;accent-color:var(--brass);background:tr
       </div>
       <div class="stage" id="h-felt">
         <div class="rail"></div>
-        <div class="felt"><div class="logo" aria-hidden="true"><b>♠</b><span>HOME GAME</span></div></div>
+        <div class="felt"><div class="logo" aria-hidden="true"><span>HOME GAME</span></div></div>
         <div class="center">
           <div class="street" id="h-street">Pre-flop</div>
           <div class="pot"><i class="pot-chip" id="h-potchip"></i><span class="pot-label">Pot</span><span class="pot-num" id="h-pot">0</span></div>
@@ -3790,15 +3790,60 @@ function hostRenderSeats(){
     return { cls: 'betspot', attrs: { 'data-tag': p.tag, style: `--x:${x.toFixed(1)}px;--y:${y.toFixed(1)}px` },
       html: `<div class="pile" style="--n:${nChips - 1}">${chips}</div><b>${fmt(p.bet)}</b>` };
   }), 'div');
-  // dealer button slides between seats
-  const d = $('#h-dbtn');
-  if (S.hand && S.dealer >= 0 && S.dealer < n){
-    const t = ts[S.dealer] + (n > 1 ? 0.32 / Math.max(1, n / 4) : 0.3);
-    const [x, y] = at(t, u * 7.6, u * 6.4);
+  placeTableBits();
+}
+/* Measured layout: the dealer button sits right beside the dealer's avatar, and each bet sits the same
+   gap away from its seat, slid sideways if needed so chips never cover any text on the table. */
+function placeTableBits(){
+  const box = $('#h-bets'), O = box.getBoundingClientRect(); if (!O.width || !S) return;
+  const u = TG.u, G = u * 1.5, cx = O.width / 2, cy = O.height / 2 + TG.dy;
+  const rel = r => ({ l: r.left - O.left, t: r.top - O.top, r: r.right - O.left, b: r.bottom - O.top });
+  const hit = (a, b, m = 0) => a.l < b.r + m && a.r > b.l - m && a.t < b.b + m && a.b > b.t - m;
+  // each seat as its parts (cards, avatar, name plate, status), so the gap is measured to what you actually see
+  const seatEls = $$('#h-seats .hseat');
+  const parts = seatEls.map(el => ['.hole', '.av', '.plate', '.st'].map(q => el.querySelector(q)).filter(Boolean).map(e => rel(e.getBoundingClientRect())).filter(r => r.r > r.l));
+  const blocks = parts.flat();
+  // dealer button: beside the avatar, on the side facing the middle of the table
+  const d = $('#h-dbtn'), dseat = S.hand && S.dealer >= 0 ? $(`#h-seats .hseat[data-i="${S.dealer}"] .av`) : null;
+  if (dseat){
+    const a = rel(dseat.getBoundingClientRect()), r = u * 1.35, side = (a.l + a.r) / 2 > cx + u ? -1 : 1;
+    const x = side > 0 ? a.r + u * .5 + r : a.l - u * .5 - r, y = (a.t + a.b) / 2;
     d.hidden = false; d.style.setProperty('--x', x.toFixed(1) + 'px'); d.style.setProperty('--y', y.toFixed(1) + 'px');
+    blocks.push({ l: x - r, t: y - r, r: x + r, b: y + r });
   } else d.hidden = true;
+  const texts = $$('.stage .center > *').filter(e => !e.hidden && e.getClientRects().length).map(e => rel(e.getBoundingClientRect())).filter(r => r.r > r.l && r.b > r.t);
+  const words = $('.stage .logo span'), wr = words ? rel(words.getBoundingClientRect()) : null;
+  const felt = rel($('.stage .felt').getBoundingClientRect());
+  let wordsHit = false;
+  $$('#h-bets .betspot').forEach(el => {
+    if (el.style.display === 'none') return;
+    const i = S.players.findIndex(p => p.tag === el.dataset.tag), own = parts[i]; if (!own || !own.length) return;
+    const sr = seatEls[i].getBoundingClientRect(), bw = el.offsetWidth, bh = el.offsetHeight;
+    const sx = (sr.left + sr.right) / 2 - O.left, sy = (sr.top + sr.bottom) / 2 - O.top;
+    let dx = cx - sx, dy = cy - sy; const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L;
+    const rect = (x, y) => ({ l: x - bw / 2, t: y - bh / 2, r: x + bw / 2, b: y + bh / 2 });
+    const nearOwn = r => own.some(p => hit(r, p, G));
+    // first spot straight in from the seat that is a full gap clear of it
+    let k = 0; while (k < L && nearOwn(rect(sx + dx * k, sy + dy * k))) k += 2;
+    const ok = (x, y) => { const r = rect(x, y);
+      return !nearOwn(r) && !blocks.some(b => hit(r, b, u * .4)) && !texts.some(t => hit(r, t, u * .6))
+        && r.l > felt.l + u && r.r < felt.r - u && r.t > felt.t + u * .5 && r.b < felt.b - u * .5; };
+    // closest clear spot to it: prefer stepping a little further in over sliding sideways
+    let best = null, bc = Infinity;
+    for (let a = 0; a <= u * 9; a += 3) for (let p = -u * 9; p <= u * 9; p += 3){
+      const c = a + Math.abs(p) * 1.6; if (c >= bc) continue;
+      const x = sx + dx * (k + a) - dy * p, y = sy + dy * (k + a) + dx * p;
+      if (ok(x, y)){ best = [x, y]; bc = c; }
+    }
+    const [x, y] = best || [sx + dx * k, sy + dy * k];
+    el.style.setProperty('--x', x.toFixed(1) + 'px'); el.style.setProperty('--y', y.toFixed(1) + 'px');
+    const r = rect(x, y); blocks.push(r);
+    if (wr && hit(r, wr, u * .5)) wordsHit = true;
+  });
+  if (words) words.style.opacity = wordsHit ? '0' : '';
 }
 function relayoutTable(){ if (tableGeom() && S && S.stage !== 'lobby') hostRenderSeats(); }
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (S && S.stage !== 'lobby') placeTableBits(); });
 if (window.ResizeObserver) new ResizeObserver(relayoutTable).observe($('#h-arena'));
 addEventListener('resize', relayoutTable);
 addEventListener('orientationchange', () => setTimeout(relayoutTable, 300));
