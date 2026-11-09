@@ -273,13 +273,15 @@ input{font:inherit}
 @keyframes pulse{50%{box-shadow:0 0 0 5px rgba(224,177,85,.12),0 0 40px rgba(224,177,85,.4)}}
 .me .who{display:flex;align-items:center;gap:8px;min-width:0}
 .me .who b{font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.me .stk{grid-row:span 2;text-align:right;font-family:var(--display);font-weight:900;font-size:46px;line-height:.9;font-variant-numeric:tabular-nums}
-.me .stk small{display:block;font-family:var(--body);font-weight:600;font-size:12px;color:var(--muted);letter-spacing:.06em}
+.me .stk{grid-row:span 2;text-align:right;font-family:var(--display);font-weight:900;font-size:46px;line-height:1;white-space:nowrap;font-variant-numeric:tabular-nums}
+.me .stk small{display:block;margin-top:4px;line-height:1.2;font-family:var(--body);font-weight:600;font-size:12px;color:var(--muted);letter-spacing:.06em}
 .me .st{font-size:14px;color:var(--muted);font-weight:600}
 .me.turn .st{color:var(--brass)}
 .strip{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:10px 0 6px;padding:10px 14px;border-radius:999px;border:6px solid var(--rail);background:radial-gradient(80% 120% at 50% 30%,var(--felt-hi),var(--felt))}
 .strip .street{font-size:12px}
-.strip .pot-num{font-size:30px}
+.strip .pot-num{font-size:30px;white-space:nowrap}
+.strip .board{min-width:0}
+.strip .slot{width:clamp(16px,calc((100vw - 250px) / 5),24px);height:auto;aspect-ratio:12/17}
 .plist2{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;list-style:none;margin:0;padding:2px 0 8px;display:flex;flex-direction:column;gap:2px}
 .prow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 10px;border-radius:12px;border:1.5px solid transparent}
 .prow .ptags{display:inline-flex;align-items:center;gap:4px;flex:none}
@@ -289,9 +291,9 @@ input{font:inherit}
 .prow .nm{display:flex;align-items:center;gap:6px;font-weight:600;min-width:0}
 .prow .nm span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .prow .st{padding-left:28px;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.prow .money{text-align:right;line-height:1.1;font-variant-numeric:tabular-nums}
+.prow .money{text-align:right;line-height:1.15;white-space:nowrap;font-variant-numeric:tabular-nums}
 .prow .money b{font-family:var(--display);font-weight:800;font-size:20px}
-.prow .money span{display:flex;align-items:center;justify-content:flex-end;gap:4px;font-size:12px;font-weight:700;color:var(--brass)}
+.prow .money span{margin-top:2px;display:flex;align-items:center;justify-content:flex-end;gap:4px;font-size:12px;font-weight:700;color:var(--brass)}
 .prow.acting{border-color:var(--brass);background:rgba(224,177,85,.1)}
 .prow.mine{background:rgba(244,236,216,.06)}
 .prow.folded{opacity:.45} .prow.out{opacity:.35}
@@ -2925,6 +2927,8 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = n => Math.round(n).toLocaleString('en-US');
+/* Shrink a big number until it fits its space (long stacks like 100,000 on a small phone). */
+function fitFont(el, max, min, fits){ if (!el || !el.getClientRects().length) return; let f = max; el.style.fontSize = f + 'px'; while (f > min && !fits()){ f -= 2; el.style.fontSize = f + 'px'; } }
 const toAmt = (v, d) => { const n = Math.round(parseFloat(String(v).replace(/[^\d.]/g, '')) * 100) / 100; return Number.isFinite(n) && n > 0 ? n : d; };
 const toInt = (v, d) => { const n = parseInt(String(v).replace(/[^\d]/g, ''), 10); return Number.isFinite(n) && n > 0 ? n : d; };
 const reduced = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -4293,12 +4297,14 @@ function phoneRender(){
   $('#p-street').textContent = st.closed ? 'Closed' : st.stage === 'betting' ? STREETS[st.street] : st.stage === 'showdown' ? 'Showdown' : st.stage === 'lobby' ? 'Waiting to deal' : 'Between hands';
   $('#p-board').innerHTML = boardHTML(st, Pn.last);
   $('#p-pot').textContent = fmt(potTotal(st));
+  fitFont($('#p-pot'), 30, 18, () => $('#p-strip').scrollWidth <= $('#p-strip').clientWidth);
   const myTurn = st.stage === 'betting' && st.toAct === me && me >= 0;
   $('#p-me').classList.toggle('turn', myTurn && !Pn.pending);
   const avh = p ? avDisc(p.av, 34) : '';
   if ($('#p-av').__h !== avh){ $('#p-av').innerHTML = avh; $('#p-av').__h = avh; }
   if (p){
     $('#p-stack').textContent = fmt(p.stack);
+    fitFont($('#p-stack'), 46, 26, () => $('#p-stack').getBoundingClientRect().width <= $('#p-me').clientWidth * .56);
     $('#p-bet').textContent = p.bet ? `In front: ${fmt(p.bet)}` : 'chips';
     $('#p-status').textContent = st.closed ? 'This table is closed.' : myTurn ? 'Your turn' : seatStatus(st, me, true) || (st.stage === 'lobby' ? "You're in. Waiting for the first deal." : st.stage === 'betting' ? `Waiting for ${st.players[st.toAct].name}` : 'Waiting for the next hand');
   } else if (!Pn.seated){
