@@ -175,7 +175,7 @@ input{font:inherit}
   color:#fff;font-family:var(--display);font-weight:800;font-size:calc(var(--u)*2.9);letter-spacing:.03em;
   box-shadow:0 0 0 calc(var(--u)*.3) #0b1512,0 0 0 calc(var(--u)*.45) rgba(244,236,216,.25),0 calc(var(--u)*.5) calc(var(--u)*1.2) rgba(0,0,0,.55);transition:box-shadow .25s}
 .hseat .av.icon{font-size:0}
-.hseat .av .dot{position:absolute;right:calc(var(--u)*.2);bottom:calc(var(--u)*.2);width:calc(var(--u)*1.2);height:calc(var(--u)*1.2);box-shadow:0 0 0 calc(var(--u)*.25) #0b1512}
+.hseat .av .dot{position:absolute;right:calc(var(--u)*-.15);bottom:calc(var(--u)*1.45);width:calc(var(--u)*1.2);height:calc(var(--u)*1.2);box-shadow:0 0 0 calc(var(--u)*.25) #0b1512}
 .hseat .hole{position:absolute;z-index:1;left:50%;top:calc(var(--u)*-2.4);width:calc(var(--u)*6);height:calc(var(--u)*4.4);transform:translateX(-50%)}
 .hseat .hole i{position:absolute;top:0;width:calc(var(--u)*3.1);height:calc(var(--u)*4.3);border-radius:calc(var(--u)*.35);border:calc(var(--u)*.22) solid #f7f1e3;
   background:repeating-linear-gradient(45deg,transparent 0 calc(var(--u)*.3),rgba(255,255,255,.2) calc(var(--u)*.3) calc(var(--u)*.4)),linear-gradient(160deg,#c9443a,#8f251d);box-shadow:0 calc(var(--u)*.2) calc(var(--u)*.5) rgba(0,0,0,.45)}
@@ -2945,6 +2945,8 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = n => Math.round(n).toLocaleString('en-US');
+/* Every part of a " · " joined line starts with a capital: "Owes 30 · Must buy in". */
+const capParts = t => String(t).replace(/(^|· )([a-z])/g, (m, a, b) => a + b.toUpperCase());
 /* Shrink a big number until it fits its space (long stacks like 100,000 on a small phone). */
 function fitFont(el, max, min, fits){ if (!el || !el.getClientRects().length) return; let f = max; el.style.fontSize = f + 'px'; while (f > min && !fits()){ f -= 2; el.style.fontSize = f + 'px'; } }
 const toAmt = (v, d) => { const n = Math.round(parseFloat(String(v).replace(/[^\d.]/g, '')) * 100) / 100; return Number.isFinite(n) && n > 0 ? n : d; };
@@ -3590,7 +3592,7 @@ function hostAct(i, kind, to, opts = {}){
 /* 7-2 offsuit bounty: the winner showed 7-2 of different suits, so every other player dealt into that hand pays the bounty.
    Anyone short pays what they have and owes the rest, which they pay from their next buy-in. */
 function hostBounty(tag){
-  if (!S || S.stage !== 'done' || !S.bounty || S.bountyHand === S.hand || !(S.lastWin || []).includes(tag)) return;
+  if (!S || (S.stage !== 'done' && S.stage !== 'over') || !S.bounty || S.bountyHand === S.hand || !(S.lastWin || []).includes(tag)) return;
   const w = S.players.find(p => p.tag === tag); if (!w) return;
   snap();
   let total = 0, owedTotal = 0; const payers = [], owers = [];
@@ -3601,13 +3603,13 @@ function hostBounty(tag){
     if (short > 0){ (p.owe = p.owe || []).push({ name: w.name, tag: w.tag, amt: short }); owedTotal += short; owers.push(p.tag); p.last = `Owes ${w.name} ${fmt(short)}`; }
   });
   w.stack += total; S.bountyHand = S.hand;
-  w.last = (/^Won/.test(w.last || '') ? w.last + ' · ' : '') + `7-2 +${fmt(total)}`;
+  w.last = (/^Won/.test(w.last || '') ? w.last + ' · ' : '') + (total ? `7-2 +${fmt(total)}` : `7-2 · ${fmt(owedTotal)} owed`);
   S.result = (S.result ? S.result + ' · ' : '') + `7-2 offsuit bounty ${w.name} +${fmt(total)}`;
   const h = S.hands && S.hands[S.hands.length - 1]; if (h && h.n === S.hand) h.bounty = [w.name, total];
   log(`${w.name} shows 7-2 offsuit and collects ${fmt(total)}${owedTotal ? `, ${fmt(owedTotal)} more owed` : ''}`);
-  if (funded() < 2) S.stage = 'over';
+  S.stage = funded() < 2 ? 'over' : 'done';
   commit({ kind: 'bounty', tag, name: w.name, amount: total, payers, owers }, { seq: false });
-  autoDeal(true);
+  if (S.stage === 'done') autoDeal(true);
 }
 /* After a hand is paid out the next one deals itself. Opening a sheet holds the deal; Pause stops it. */
 const DEAL_MS = (parseFloat(QS.get('deal')) || 6) * 1000;
@@ -3671,7 +3673,8 @@ function hostClose(){
 
 /* ---- host rendering ---- */
 function netDot(sel, st){ const d = $(sel); if (d){ d.className = 'dot ' + st; d.title = st === 'on' ? 'Connected' : 'Offline'; } }
-function seatStatus(st, i, me){
+function seatStatus(st, i, me){ return capParts(seatStatus0(st, i, me)); }
+function seatStatus0(st, i, me){
   const p = st.players[i], inHand = st.stage === 'betting' || st.stage === 'showdown';
   if (p.leaving) return 'Leaving after this hand';
   if (inHand && p.out) return 'Out of chips';
@@ -3857,7 +3860,7 @@ function placeTableBits(){
   const d = $('#h-dbtn'), dseat = S.hand && S.dealer >= 0 ? $(`#h-seats .hseat[data-i="${S.dealer}"] .av`) : null;
   if (dseat){
     const a = rel(dseat.getBoundingClientRect()), r = u * 1.35, side = (a.l + a.r) / 2 > cx + u ? -1 : 1;
-    const x = side > 0 ? a.r + u * .5 + r : a.l - u * .5 - r, y = (a.t + a.b) / 2;
+    const x = side > 0 ? a.r + u * .9 + r : a.l - u * .6 - r, y = (a.t + a.b) / 2;   // a little extra room on the right for the online dot
     d.hidden = false; d.style.setProperty('--x', x.toFixed(1) + 'px'); d.style.setProperty('--y', y.toFixed(1) + 'px');
     blocks.push({ l: x - r, t: y - r, r: x + r, b: y + r });
   } else d.hidden = true;
@@ -3911,6 +3914,11 @@ function patchList(ul, items, tagName = 'li'){
     li.__sig = sig;
   });
 }
+/* After a hand (including one that leaves a single player with chips), the tablet offers the 7-2 bounty for each winner. */
+function bountyButtons(){
+  return S.bounty && S.hand && S.bountyHand !== S.hand ? (S.lastWin || []).map(t => S.players.find(p => p.tag === t)).filter(Boolean)
+    .map(p => `<button class="btn b-allin" data-h="bounty" data-tag="${p.tag}" style="font-size:17px">7-2 offsuit · ${esc(p.name)}</button>`).join('') : '';
+}
 function hostRenderDock(){
   const d = $('#h-dock'); let msg = '', btns = '', cls = '';
   if (S.stage === 'lobby'){
@@ -3926,21 +3934,19 @@ function hostRenderDock(){
   } else if (S.stage === 'over'){
     const left = S.players.filter(p => p.stack > 0);
     msg = `<b>${left.length === 1 ? esc(left[0].name) + ' has every chip' : 'Waiting for chips'}</b><span>Busted players can buy in from their phones, or you can buy them in by tapping their seat.</span>`;
-    btns = `<button class="btn b-raise" data-h="deal"${S.players.filter(p => p.stack > 0).length < 2 ? ' disabled' : ''}>Deal hand ${S.hand + 1}</button>`;
+    btns = bountyButtons() + `<button class="btn b-raise" data-h="deal"${S.players.filter(p => p.stack > 0).length < 2 ? ' disabled' : ''}>Deal hand ${S.hand + 1}</button>`;
   } else {
     cls = ' result';
     const n = nextSeat(S.dealer, p => p.stack > 0);
     const counting = !VIEW && AD.at && !AD.paused;
     msg = `<b>${esc(S.result || 'Ready')}</b><span>${S.resultSub ? esc(S.resultSub) + ' · ' : ''}Button moves to ${n >= 0 ? esc(P(n).name) : 'the next player'}${counting ? ` · <b id="h-count" style="display:inline;font:inherit;color:var(--brass)">Next hand in ${Math.max(1, Math.ceil((AD.at - Date.now()) / 1000))}s</b>` : ''}</span>`;
-    const bountyBtns = S.bounty && S.bountyHand !== S.hand ? (S.lastWin || []).map(t => S.players.find(p => p.tag === t)).filter(Boolean)
-      .map(p => `<button class="btn b-allin" data-h="bounty" data-tag="${p.tag}" style="font-size:17px">7-2 offsuit · ${esc(p.name)}</button>`).join('') : '';
-    btns = bountyBtns + (counting ? `<button class="btn b-fold" data-h="pause">Pause</button><button class="btn b-raise" data-h="deal">Deal now</button>`
+    btns = bountyButtons() + (counting ? `<button class="btn b-fold" data-h="pause">Pause</button><button class="btn b-raise" data-h="deal">Deal now</button>`
                                   : `<button class="btn b-raise" data-h="deal">Deal hand ${S.hand + 1}</button>`);
   }
   if (S.closed){ cls = ''; const pl = settlePlan(S); msg = `<b>Table closed</b><span>${pl.pays.length ? pl.pays.map(x => `${esc(x.from)} pays ${esc(x.to)} ${moneyText(x.chips, pl.m)}`).join(' · ') : 'Everyone finished even.'}</span>`; btns = VIEW ? `<button class="btn b-raise" data-h="home">Back to start</button>` : ''; }
   else if (VIEW) btns = '';
   else if (S.stage === 'lobby' || S.stage === 'over' || (S.stage === 'done' && !(AD.at && !AD.paused))) btns = `<button class="btn b-fold" data-h="close">Close table</button>` + btns;
-  d.innerHTML = `<div class="msg${cls}">${msg}</div><div class="btns">${btns}</div>`;
+  d.innerHTML = `<div class="msg${cls}">${capParts(msg)}</div><div class="btns">${btns}</div>`;
 }
 function hostFx(fx, opts){
   const seat = tag => $(`.hseat[data-tag="${tag}"]`);
@@ -4004,7 +4010,7 @@ function renderSeat(){
   if (p.owe && p.owe.length) h += `<p class="hint">Owes ${p.owe.map(o => `${esc(o.name)} ${fmt(o.amt)}`).join(', ')} for the 7-2 bounty. Sits out until they buy in.</p>`;
   if (buyLimits(S, p).max > 0) h += `<button class="btn-sec" data-s="topup"${p.topup ? ' disabled' : ''}>${p.topup ? `Buy-in of ${fmt(+p.topup || 0)} booked` : live(S, i) ? 'Book a buy-in for after this hand' : 'Buy in'}</button>`;
   h += `<button class="btn-danger" data-s="remove">${inHand ? 'Remove after this hand' : 'Remove from table'}</button></div>`;
-  $('#seat-body').innerHTML = h;
+  $('#seat-body').innerHTML = capParts(h);
 }
 $('#seat-body').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b || b.disabled) return;
@@ -4133,11 +4139,12 @@ function actionButtons(st, i, scope, disabled){
   const minTo = st.currentBet === 0 ? st.handBB : st.currentBet + st.minRaise;
   // Raise opens the sheet, which also holds All in. It stays available whenever you can put in more than a call.
   const raiseOK = !p.locked && max > st.currentBet;
-  const callAll = toCall > 0 && toCall >= p.stack;
+  // Calling puts you all in, or the bet you face is someone's all in
+  const callAll = toCall > 0 && (toCall >= p.stack || st.players.some((q, k) => k !== i && q.allIn && !q.folded && q.bet === st.currentBet));
   const dis = disabled ? ' disabled' : '';
   return `<div class="btns three" data-scope="${scope}">
     <button class="btn b-foldact" data-act="fold"${dis}>Fold</button>
-    <button class="btn b-call" data-act="${toCall === 0 ? 'check' : 'call'}"${dis}>${toCall === 0 ? 'Check' : callAll ? 'Call · all in' : 'Call ' + fmt(toCall)}</button>
+    <button class="btn b-call" data-act="${toCall === 0 ? 'check' : 'call'}"${dis}>${toCall === 0 ? 'Check' : callAll ? 'Call (All-in)' : 'Call ' + fmt(toCall)}</button>
     <button class="btn b-raise" data-act="raise"${raiseOK && !disabled ? '' : ' disabled'}>${st.currentBet === 0 ? 'Bet' : 'Raise'}</button>
   </div>${p.locked && !disabled ? '<p class="dock-note">A short all-in did not reopen the raising. You can call or fold.</p>' : ''}`;
 }
@@ -4205,7 +4212,7 @@ function setBuy(v, keepText, silent){
   if (!keepText) $('#b-amt').value = fmt(B.val);
   $('#b-slider').value = B.val;
   const p = B.st.players[B.i], after = p.stack + B.val - Math.min(B.owed, B.val);
-  $('#b-sub').textContent = (B.owed ? `${fmt(B.owed)} pays the bounty · ` : '') + `${B.self ? "you'll" : p.name + ' will'} have ${fmt(after)} chips` + (live(B.st, B.i) || (B.owed && (B.st.stage === 'betting' || B.st.stage === 'showdown')) ? ' after this hand' : '');
+  $('#b-sub').textContent = capParts((B.owed ? `${fmt(B.owed)} pays the bounty · ` : '') + `${B.self ? "you'll" : p.name + ' will'} have ${fmt(after)} chips` + (live(B.st, B.i) || (B.owed && (B.st.stage === 'betting' || B.st.stage === 'showdown')) ? ' after this hand' : ''));
   $('#b-ok').textContent = `Buy in ${fmt(B.val)}`;
   if (prev !== B.val && !silent) Snd.tick();
 }
@@ -4388,7 +4395,7 @@ function phoneRender(){
   if (p){
     $('#p-stack').textContent = fmt(p.stack);
     fitFont($('#p-stack'), 46, 26, () => $('#p-stack').getBoundingClientRect().width <= $('#p-me').clientWidth * .56);
-    $('#p-bet').textContent = p.bet ? `In front: ${fmt(p.bet)}` : 'chips';
+    $('#p-bet').textContent = p.bet ? `In front: ${fmt(p.bet)}` : 'Chips';
     $('#p-status').textContent = st.closed ? 'This table is closed.' : myTurn ? 'Your turn' : seatStatus(st, me, true) || (st.stage === 'lobby' ? "You're in. Waiting for the first deal." : st.stage === 'betting' ? `Waiting for ${st.players[st.toAct].name}` : 'Waiting for the next hand');
   } else if (!Pn.seated){
     $('#p-stack').textContent = '–'; $('#p-bet').textContent = '';
@@ -4705,11 +4712,11 @@ function renderHistDetail(code){
   $('#hd-paylbl').textContent = st.closed ? 'Who pays who' : 'Who pays who (so far)';
   $('#hd-pays').innerHTML = paysHTML(st, plan);
   $('#hd-rate').textContent = `${rateText(plan.m)}. Fewest payments that square everyone up.`;
-  $('#hd-sub').textContent = `${fmtDate(st.table.created)} · code ${code} · ${st.closed ? 'closed' : 'still open'} · blinds ${fmt(st.sb)}/${fmt(st.bb)} · starting stack ${fmt(st.startStack)}`;
-  $('#hd-stats').innerHTML = `<div><b>${sm.hands}</b><span>hands played</span></div>
-    <div><b>${durText(st.table.created, st.table.closedAt || st.table.lastAt)}</b><span>length</span></div>
-    <div><b>${sm.rows.length}</b><span>players</span></div>
-    <div><b>${sm.big ? fmt(sm.big.pot) : '0'}</b><span>${sm.big ? `biggest pot, hand ${sm.big.n}, ${esc(sm.big.win.map(w => w[0]).join(' & '))}` : 'biggest pot'}</span></div>`;
+  $('#hd-sub').textContent = `${fmtDate(st.table.created)} · Code ${code} · ${st.closed ? 'Closed' : 'Still open'} · Blinds ${fmt(st.sb)}/${fmt(st.bb)} · Starting stack ${fmt(st.startStack)}`;
+  $('#hd-stats').innerHTML = `<div><b>${sm.hands}</b><span>Hands played</span></div>
+    <div><b>${durText(st.table.created, st.table.closedAt || st.table.lastAt)}</b><span>Length</span></div>
+    <div><b>${sm.rows.length}</b><span>Players</span></div>
+    <div><b>${sm.big ? fmt(sm.big.pot) : '0'}</b><span>${sm.big ? `Biggest pot, hand ${sm.big.n}, ${esc(sm.big.win.map(w => w[0]).join(' & '))}` : 'Biggest pot'}</span></div>`;
   $('#hd-table').innerHTML = `<thead><tr><th>Player</th><th class="num">Bought</th><th class="num">Chips</th><th class="num">Net</th><th class="num">${esc(plan.m.cur)}</th><th class="num">Hands won</th></tr></thead><tbody>` +
     sm.rows.map(x => { const c = x.net > 0 ? 'pos' : x.net < 0 ? 'neg' : '', sg = x.net > 0 ? '+' : x.net < 0 ? '−' : '';
       return `<tr class="${x.left ? 'gone' : ''}"><td class="nm">${esc(x.name)}${x.left ? ' (left)' : ''}</td><td class="num">${fmt(x.bought)}</td><td class="num">${fmt(x.chips)}</td><td class="num ${c}">${sg}${fmt(Math.abs(x.net))}</td><td class="num ${c}">${sg}${moneyText(x.net, plan.m).replace(/^\S+ /, '')}</td><td class="num">${x.won}</td></tr>`; }).join('') + '</tbody>';
@@ -4776,7 +4783,7 @@ function goHome(){
   show('home');
   const list = [];
   const hc = store.get('hgc-host-last'), hr = hc && store.json(hostKey(hc));
-  if (hr && hr.S && !hr.S.closed) list.push(`<div class="resume"><div><b>Resume ${esc(hr.S.table.label)}</b><span>Table device · code ${esc(hc)} · ${hr.S.players.length} players</span></div><button class="btn b-raise" data-resume-host="${esc(hc)}">Resume</button></div>`);
+  if (hr && hr.S && !hr.S.closed) list.push(`<div class="resume"><div><b>Resume ${esc(hr.S.table.label)}</b><span>Table device · Code ${esc(hc)} · ${hr.S.players.length} players</span></div><button class="btn b-raise" data-resume-host="${esc(hc)}">Resume</button></div>`);
   const pc = store.get('hgc-phone-last'), pr = pc && store.json(phoneKey(pc));
   if (pr && pr.pid) list.push(`<div class="resume"><div><b>Rejoin as ${esc(pr.name)}</b><span>Code ${esc(pc)}</span></div><button class="btn b-raise" data-resume-phone="${esc(pc)}">Rejoin</button></div>`);
   const wr = store.json('hgc-watch-last');
