@@ -461,7 +461,7 @@ input[type=range]{width:100%;height:36px;accent-color:var(--brass);background:tr
       <p class="hint" style="grid-column:span 2;align-self:end;margin:0 0 4px">Win a hand holding 7-2 offsuit (different suits) and every other player dealt in pays you this. Set 0 to turn it off.</p>
     </div>
     <div><span class="lbl">Chip value</span>
-      <div class="rate"><input class="txt" id="c-rate" inputmode="numeric" value="10" aria-label="Chips"><span>chips =</span><b>1</b><input class="txt" id="c-cur" maxlength="5" value="HKD" autocapitalize="characters" aria-label="Currency"></div>
+      <div class="rate"><input class="txt" id="c-rate" inputmode="numeric" value="10" aria-label="Chips"><span>chips =</span><b>1 HKD</b></div>
       <p class="hint">Used to work out who pays who when the table closes.</p></div>
     <p class="hint" id="c-blindhint"></p>
     <p class="err" id="c-err" role="alert"></p>
@@ -3364,7 +3364,7 @@ function hostCreate(){
   const err = $('#c-err');
   const max = +$('#c-max').textContent, stack = toInt($('#c-stack').value, 0), bb = toInt($('#c-bb').value, 0);
   const sb = max < 4 ? Math.max(1, Math.min(toInt($('#c-sb').value, 1), bb || 1)) : toInt($('#c-sb').value, 0);
-  const money = { chips: toInt($('#c-rate').value, 10), cur: (String($('#c-cur').value).toUpperCase().replace(/[^A-Z$€£¥]/g, '').slice(0, 5) || 'HKD') };
+  const money = { chips: toInt($('#c-rate').value, 10), cur: 'HKD' };
   const bountyRaw = String($('#c-bounty').value).trim(), bounty = bountyRaw === '' ? 0 : (parseInt(bountyRaw.replace(/[^\d]/g, ''), 10) || 0);
   if (!stack || !sb || !bb){ err.textContent = max < 4 ? 'Enter the stack and the blind as whole numbers.' : 'Enter the stack and both blinds as whole numbers.'; return; }
   if (bb < sb){ err.textContent = 'The big blind must be at least the small blind.'; return; }
@@ -3966,7 +3966,7 @@ function renderHostMenu(){
       <label><span class="lbl">Big blind</span><input class="txt" id="m-bb" inputmode="numeric" value="${S.bb}"></label></div>
       <button class="btn-sec" data-m="blinds">Save blinds</button><p class="hint" id="m-msg">New blinds start with the next hand.</p></div>`}
     <div class="m-sec"><h3>Chip value</h3>
-      <div class="rate"><input class="txt" id="m-rate" inputmode="numeric" value="${moneyOf(S).chips}" aria-label="Chips"><span>chips =</span><b>1</b><input class="txt" id="m-cur" maxlength="5" value="${esc(moneyOf(S).cur)}" aria-label="Currency"><button class="btn-sec" data-m="rate" style="margin:0;height:48px">Save</button></div>
+      <div class="rate"><input class="txt" id="m-rate" inputmode="numeric" value="${moneyOf(S).chips}" aria-label="Chips"><span>chips =</span><b>1 ${esc(moneyOf(S).cur)}</b><button class="btn-sec" data-m="rate" style="margin:0 0 0 auto;height:48px">Save</button></div>
       <p class="hint" id="m-rmsg">Used for the settle-up when the table closes.</p></div>
     <div class="m-sec"><h3>7-2 offsuit bounty</h3>
       <div class="add-row"><input class="txt" id="m-bounty" inputmode="numeric" value="${S.bounty || 0}"><button class="btn-sec" data-m="bounty">Save</button></div>
@@ -4004,8 +4004,8 @@ $('#menu-body').addEventListener('click', e => {
     snap(); S.sb = sb; S.bb = bb; log($('#m-sb') ? `Blinds go to ${fmt(sb)}/${fmt(bb)} next hand` : `Blind goes to ${fmt(bb)} next hand`); commit(null, { seq: false });
     msg.textContent = $('#m-sb') ? `Saved. ${fmt(sb)}/${fmt(bb)} starts next hand.` : `Saved. A blind of ${fmt(bb)} starts next hand.`;
   } else if (m === 'rate'){
-    const chips = toInt($('#m-rate').value, 0), cur = String($('#m-cur').value).toUpperCase().replace(/[^A-Z$€£¥]/g, '').slice(0, 5) || 'HKD';
-    if (!chips){ $('#m-rmsg').textContent = 'Enter how many chips make 1 unit of money.'; return; }
+    const chips = toInt($('#m-rate').value, 0), cur = moneyOf(S).cur;
+    if (!chips){ $('#m-rmsg').textContent = `Enter how many chips make 1 ${cur}.`; return; }
     snap(); S.money = { chips, cur }; log(`Chip value set to ${fmt(chips)} chips = 1 ${cur}`); commit(null, { seq: false });
     $('#m-rmsg').textContent = `Saved. ${fmt(chips)} chips = 1 ${cur}.`;
   } else if (m === 'bounty'){
