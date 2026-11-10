@@ -154,7 +154,7 @@ input{font:inherit}
   display:grid;place-items:center;color:rgba(244,236,216,.06);pointer-events:none}
 .stage .logo b{font-size:calc(var(--u)*17);line-height:1;margin-top:calc(var(--u)*-3)}
 .stage .logo span{transition:opacity .3s;position:absolute;bottom:calc(var(--u)*2.6);font-family:var(--display);font-weight:800;font-size:calc(var(--u)*2.1);letter-spacing:.35em;text-indent:.35em;color:rgba(244,236,216,.1)}
-.stage .center{position:absolute;left:50%;top:calc(50% + var(--dy,0px));transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:calc(var(--u)*1);text-align:center;width:calc(var(--rx)*1.1);pointer-events:none}
+.stage .center{position:absolute;left:50%;top:calc(50% + var(--dy,0px));transform:translate(-50%,calc(-50% + var(--cshift,0px)));display:flex;flex-direction:column;align-items:center;gap:calc(var(--u)*1);text-align:center;width:calc(var(--rx)*1.1);pointer-events:none}
 .stage .street{font-size:max(11px,calc(var(--u)*1.3))}
 .stage .pot{display:inline-flex;white-space:nowrap;align-items:center;gap:calc(var(--u)*.8);padding:calc(var(--u)*.5) calc(var(--u)*1.6) calc(var(--u)*.5) calc(var(--u)*.6);border-radius:999px;background:rgba(0,0,0,.38);box-shadow:inset 0 0 0 1px rgba(224,177,85,.25)}
 .stage .pot-chip{display:block;flex:none;width:calc(var(--u)*2.8);height:calc(var(--u)*2.8);background-size:100% 100%}
@@ -382,6 +382,8 @@ input[type=range]{width:100%;height:36px;accent-color:var(--brass);background:tr
 .fcard{position:fixed;width:16px;height:22px;border-radius:3px;border:1.5px solid var(--ivory);background:repeating-linear-gradient(45deg,var(--red-deep) 0 2px,var(--red) 2px 4px);opacity:0}
 .stamp{position:absolute;left:50%;top:50%;pointer-events:none;font-family:var(--display);font-weight:900;font-size:21px;letter-spacing:.12em;text-transform:uppercase;padding:0 8px;border:2.5px solid currentColor;border-radius:7px;color:var(--brass);background:rgba(8,40,32,.8);animation:stamp 1s forwards;white-space:nowrap;z-index:2}
 .stamp.s-check,.stamp.s-call{color:var(--ivory)} .stamp.s-fold{color:var(--muted)}
+/* on the tablet table: over the avatar and above the name plate, so the action is never hidden */
+.hseat .stamp{top:calc(var(--u)*3.3);z-index:6;font-size:max(15px,calc(var(--u)*2.1));padding:0 calc(var(--u)*.7);box-shadow:0 calc(var(--u)*.3) calc(var(--u)*1.2) rgba(0,0,0,.45)}
 @keyframes stamp{0%{opacity:0;transform:translate(-50%,-50%) rotate(-9deg) scale(1.9)}16%{opacity:1;transform:translate(-50%,-50%) rotate(-9deg) scale(1)}72%{opacity:1}100%{opacity:0;transform:translate(-50%,-50%) rotate(-9deg) scale(.96)}}
 .fx-allin{position:fixed;inset:0;display:grid;place-items:center;pointer-events:none;contain:strict}
 .allin-flash{position:absolute;left:50%;top:45%;width:50vmin;height:50vmin;margin:-25vmin 0 0 -25vmin;border-radius:50%;background:radial-gradient(circle,rgba(224,177,85,.7),rgba(216,73,59,.35) 45%,rgba(216,73,59,0) 70%);opacity:0;will-change:transform,opacity}
@@ -3932,42 +3934,52 @@ function hostRenderSeats(){
 const spotCache = { u: -1, near: [], far: [] };
 function betSpots(u){
   if (spotCache.u === u) return spotCache;
-  const near = [], far = [], byCost = (x, y) => x[2] - y[2];
-  // near: up to 9u in and 9u sideways. far: the ring beyond that, up to 14u in and 24u sideways, only tried when near has no clear spot.
-  for (let a = 0; a <= u * 14; a += 3) for (let p = -u * 24; p <= u * 24; p += 3){
-    const c = [a, p, a + Math.abs(p) * 1.6];
-    (a <= u * 9 && Math.abs(p) <= u * 9 ? near : far).push(c);
-  }
-  near.sort(byCost); far.sort(byCost);
-  Object.assign(spotCache, { u, near, far });
+  const near = [], byCost = (x, y) => x[2] - y[2];
+  // only spots right in front of the seat: up to 5u further in and 6u to either side
+  for (let a = 0; a <= u * 5; a += 2) for (let p = -u * 6; p <= u * 6; p += 2) near.push([a, p, a + Math.abs(p) * 1.6]);
+  near.sort(byCost);
+  Object.assign(spotCache, { u, near });
   return spotCache;
 }
 /* Measured layout: the dealer button sits right beside the dealer's avatar, and each bet sits the same
    gap away from its seat, slid sideways if needed so chips never cover any text on the table. */
 /* On a short table the middle column (street, pot, cards, side pots) can reach the seats at the top or bottom.
    Measure it with full-size cards, and if it comes too close, shrink the cards just enough to clear. */
+const BET_GAP = 1.1;   // gap between a seat and its chips, in table units
 function fitCentre(){
   const felt = $('#h-felt').style, full = TG.cw; if (!full) return;
   if (felt.getPropertyValue('--cw') !== full + 'px') felt.setProperty('--cw', full + 'px');
-  const items = $$('.stage .center > *').filter(e => !e.hidden && e.getClientRects().length).map(e => e.getBoundingClientRect());
+  if (felt.getPropertyValue('--cshift') !== '0px') felt.setProperty('--cshift', '0px');
+  // an empty side-pot line takes no room
+  const items = $$('.stage .center > *').filter(e => !e.hidden && e.getClientRects().length).map(e => e.getBoundingClientRect()).filter(r => r.width > 0);
   if (!items.length) return;
   const top = Math.min(...items.map(r => r.top)), bot = Math.max(...items.map(r => r.bottom));
   const l = Math.min(...items.map(r => r.left)), r = Math.max(...items.map(r => r.right));
-  let room = Infinity;
-  const mid = (top + bot) / 2;
+  const u = TG.u, mid = (top + bot) / 2;
+  // room needed: half a unit to any seat, and for the seats straight above or below, a whole chip stack plus its gaps
+  const betH = ($$('#h-bets .betspot').find(b => b.offsetHeight) || {}).offsetHeight || u * 3.6;
+  const needIn = u * BET_GAP + betH + u * .8;
+  let slackTop = Infinity, slackBot = Infinity;
   $$('#h-seats .hseat').forEach(s => { const sr = s.getBoundingClientRect(); if (Math.abs((sr.top + sr.bottom) / 2 - mid) < TG.ry * .6) return;   // seats beside the column don't count
+    const inline = (sr.left + sr.right) / 2 > l && (sr.left + sr.right) / 2 < r, above = (sr.top + sr.bottom) / 2 < mid;
     ['.hole', '.av', '.plate', '.st'].forEach(q => {
-    const e = s.querySelector(q), b = e && e.getClientRects().length ? e.getBoundingClientRect() : null;
-    if (!b || !b.width || b.right < l || b.left > r) return;
-    room = Math.min(room, b.top >= bot ? b.top - bot : b.bottom <= top ? top - b.bottom : -Math.min(b.bottom - top, bot - b.top));
-  }); });
-  const need = TG.u * .5 - room;
-  if (need > 0) felt.setProperty('--cw', Math.max(12, full - need * 2 / 1.4) + 'px');    // the column is centred, so it shrinks from both ends
+      const e = s.querySelector(q), b = e && e.getClientRects().length ? e.getBoundingClientRect() : null;
+      if (!b || !b.width || b.right < l || b.left > r) return;
+      const gap = above ? top - b.bottom : b.top - bot, slack = gap - (inline ? needIn : u * .5);
+      if (above) slackTop = Math.min(slackTop, slack); else slackBot = Math.min(slackBot, slack);
+    });
+  });
+  if (!isFinite(slackTop) && !isFinite(slackBot)) return;
+  const cap = u * 4, st = Math.min(slackTop, cap * 2), sb = Math.min(slackBot, cap * 2);
+  // slide the column toward the roomier side so both gaps match, then shrink the cards if it still doesn't fit
+  const shift = Math.max(-cap, Math.min(cap, (sb - st) / 2)), even = Math.min(st + shift, sb - shift);
+  if (Math.abs(shift) > .5) felt.setProperty('--cshift', shift.toFixed(1) + 'px');
+  if (even < 0) felt.setProperty('--cw', Math.max(12, full + even * 2 / 1.4) + 'px');    // the column is centred, so it shrinks from both ends
 }
 function placeTableBits(){
   const box = $('#h-bets'), O = box.getBoundingClientRect(); if (!O.width || !S) return;
   fitCentre();
-  const u = TG.u, G = u * 1.5, cx = O.width / 2, cy = O.height / 2 + TG.dy;
+  const u = TG.u, G = u * BET_GAP, cx = O.width / 2, cy = O.height / 2 + TG.dy;
   const rel = r => ({ l: r.left - O.left, t: r.top - O.top, r: r.right - O.left, b: r.bottom - O.top });
   const hit = (a, b, m = 0) => a.l < b.r + m && a.r > b.l - m && a.t < b.b + m && a.b > b.t - m;
   // each seat as its parts (cards, avatar, name plate, status), so the gap is measured to what you actually see
@@ -4000,16 +4012,11 @@ function placeTableBits(){
     const ok = (x, y) => { const r = rect(x, y);
       return r.l > felt.l + u && r.r < felt.r - u && r.t > felt.t + u * .5 && r.b < felt.b - u * .5
         && !nearOwn(r) && !blocks.some(b => hit(r, b, u * .4)) && !texts.some(t => hit(r, t, u * .6)); };
-    // closest clear spot to it: candidates come best-first, so the first clear one is the answer
-    // nothing clear close by (a long side-pot line, a cramped screen): look further out before giving up
+    // closest clear spot in front of the seat: candidates come best-first, so the first clear one is the answer
     let best = null;
-    const spots = betSpots(u);
-    for (const list of [spots.near, spots.far]){
-      for (const [a, p] of list){
-        const x = sx + dx * (k + a) - dy * p, y = sy + dy * (k + a) + dx * p;
-        if (ok(x, y)){ best = [x, y]; break; }
-      }
-      if (best) break;
+    for (const [a, p] of betSpots(u).near){
+      const x = sx + dx * (k + a) - dy * p, y = sy + dy * (k + a) + dx * p;
+      if (ok(x, y)){ best = [x, y]; break; }
     }
     const [x, y] = best || [sx + dx * k, sy + dy * k];
     el.style.setProperty('--x', x.toFixed(1) + 'px'); el.style.setProperty('--y', y.toFixed(1) + 'px');
@@ -4078,12 +4085,15 @@ function hostRenderDock(){
 function hostFx(fx, opts){
   const seat = tag => $(`.hseat[data-tag="${tag}"]`);
   const el = fx.tag ? seat(fx.tag) : null, pot = $('#h-pot');
+  // a bet lands in the stack in front of the player (the pot only collects it when the round ends)
+  const spot = fx.tag ? $(`#h-bets .betspot[data-tag="${fx.tag}"]`) : null;
+  const front = spot && spot.style.display !== 'none' && spot.getClientRects().length ? (spot.querySelector('.pile') || spot) : pot;
   switch (fx.kind){
     case 'fold': Snd.fold(); flyCards(opts.foldRect); stamp(el, 'Fold', 'fold'); break;
     case 'check': Snd.check(); stamp(el, 'Check', 'check'); break;
-    case 'call': { const n = chipCount(fx.moved); Snd.chips(n); flyChips(el, pot, n); stamp(el, 'Call', 'call'); break; }
-    case 'bet': case 'raise': { const n = chipCount(fx.moved) + 2; Snd.chips(n, 0, .045); flyChips(el, pot, n); stamp(el, fx.kind === 'bet' ? 'Bet' : 'Raise', 'raise'); break; }
-    case 'allin': Snd.allIn(); allInFx(fx.name, null); requestAnimationFrame(() => flyChips(el, pot, 8)); break;
+    case 'call': { const n = chipCount(fx.moved); Snd.chips(n); flyChips(el, front, n); stamp(el, 'Call', 'call'); break; }
+    case 'bet': case 'raise': { const n = chipCount(fx.moved) + 2; Snd.chips(n, 0, .045); flyChips(el, front, n); stamp(el, fx.kind === 'bet' ? 'Bet' : 'Raise', 'raise'); break; }
+    case 'allin': Snd.allIn(); allInFx(fx.name, null); requestAnimationFrame(() => flyChips(el, front, 8)); break;
     case 'deal': Snd.shuffle(); break;
     case 'join': Snd.join(); break;
     case 'topup': Snd.chips(5); flyChips(pot, el, 5); break;
