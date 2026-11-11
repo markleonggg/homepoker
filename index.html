@@ -5169,7 +5169,7 @@ function statsHTML(st){
     return `<tr><td class="nm">${esc(r.name)}</td><td class="num">${fmt(tot)}</td>${cell(r.n.f)}${cell(r.n.x)}${cell(r.n.c)}${cell(r.n.b)}${cell(r.n.r)}${cell(r.ai)}</tr>`; }).join('');
   return `<p class="hint" style="margin:0 0 10px">From ${fmt(ps.logged)} tracked hand${ps.logged === 1 ? '' : 's'}. Small samples swing a lot, so give it a few dozen hands before reading much into them.</p>
     <div class="tbl-wrap"><table class="settle stats"><thead><tr><th>Tendencies</th>${th('Hands', 'Hands dealt in')}${th('VPIP', 'Put money in voluntarily before the flop')}${th('PFR', 'Raised before the flop')}${th('3-bet', 'Re-raised a single pre-flop raise')}${th('C-bet', 'Bet the flop after raising pre-flop')}${th('AF', 'Aggression after the flop: (bets + raises) ÷ calls')}${th('Fold to bet', 'Folded when facing a bet after the flop')}${th('WTSD', 'Went to showdown after seeing the flop')}${th('W$SD', 'Won money at showdown')}${th('Won', 'Hands won')}</tr></thead><tbody>${tend}</tbody></table></div>
-    <div class="tbl-wrap" style="margin-top:12px"><table class="settle stats"><thead><tr><th>How often they…</th>${th('Actions', 'Decisions made (blinds not counted)')}${th('Fold', '')}${th('Check', '')}${th('Call', '')}${th('Bet', '')}${th('Raise', '')}${th('All in', 'Share of actions that put them all in')}</tr></thead><tbody>${freq}</tbody></table></div>
+    <div class="tbl-wrap" style="margin-top:12px"><table class="settle stats"><thead><tr><th>Betting frequency</th>${th('Actions', 'Decisions made (blinds not counted)')}${th('Fold', '')}${th('Check', '')}${th('Call', '')}${th('Bet', '')}${th('Raise', '')}${th('All in', 'Share of actions that put them all in')}</tr></thead><tbody>${freq}</tbody></table></div>
     <details class="legend"><summary>What these mean</summary><dl>
       <dt>VPIP</dt><dd>How often they put chips in before the flop by choice (calling or raising, not posting a blind). Loose players are high, tight players low.</dd>
       <dt>PFR</dt><dd>How often they raise before the flop. Close to VPIP means they mostly raise when they play; far below means they mostly call.</dd>
@@ -5179,7 +5179,7 @@ function statsHTML(st){
       <dt>Fold to bet</dt><dd>After the flop, how often they fold when facing a bet.</dd>
       <dt>WTSD</dt><dd>Of the hands where they saw the flop, how often they went all the way to a showdown.</dd>
       <dt>W$SD</dt><dd>Of their showdowns, how often they won chips.</dd>
-      <dt>How often they…</dt><dd>Each action as a share of all their decisions, with the count beside it. The spreadsheet splits these by street and lists every action.</dd>
+      <dt>Betting frequency</dt><dd>How often each player folds, checks, calls, bets, raises or goes all in, as a share of all their decisions, with the count beside it. The spreadsheet splits these by street and lists every action.</dd>
     </dl></details>`;
 }
 function avByName(st, name, size = 28){ const p = st.players.find(q => q.name === name); return p && avOk(p.av) ? avDisc(p.av, size) : ''; }
