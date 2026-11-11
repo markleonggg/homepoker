@@ -213,6 +213,21 @@ input{font:inherit}
 .hdock .btn{min-width:150px;padding:0 18px}
 .hdock .btn.armed{background:var(--red);color:var(--ivory);border-color:var(--red)}
 .ghost.armed{background:var(--red);border-color:var(--red);color:var(--ivory)}
+/* a row across the top of the table's bar: a phone asking for a seat, or a save that failed */
+.hdock .hnote{flex:1 1 100%;display:flex;align-items:center;justify-content:space-between;gap:10px 14px;flex-wrap:wrap;padding:10px 14px;border-radius:14px;background:rgba(224,177,85,.12);box-shadow:inset 0 0 0 1.5px var(--brass)}
+.hdock .hnote b{display:block;font-weight:700;font-size:16px}
+.hdock .hnote span{font-size:13px;color:var(--muted)}
+.hdock .hnote.warn{background:rgba(216,73,59,.16);box-shadow:inset 0 0 0 1.5px var(--red)}
+.hdock .hnote .btn{min-width:130px;height:46px}
+/* player stats */
+#v-host:not([hidden]) ~ #sheet-menu .sheet-panel{max-width:820px}
+.stats th,.stats td{white-space:nowrap}
+.stats .num small{color:var(--muted);font-size:11px;margin-left:3px}
+.legend{margin-top:10px;font-size:12.5px;color:var(--muted)}
+.legend summary{cursor:pointer;font-weight:600;color:var(--ivory)}
+.legend dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:5px 12px;margin:8px 0 0}
+.legend dt{font-weight:700;color:var(--ivory)}
+.legend dd{margin:0}
 .hcard{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;align-items:center;text-align:left;padding:14px 16px;border-radius:16px;border:1.5px solid var(--line);background:rgba(0,0,0,.18)}
 .hcard b{font-family:var(--display);font-weight:800;font-size:22px;letter-spacing:.04em;text-transform:uppercase}
 .hcard span{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -266,7 +281,7 @@ input{font:inherit}
 .joininfo .big{font-family:var(--display);font-weight:900;font-size:clamp(44px,7vw,76px);letter-spacing:.18em;color:var(--brass);line-height:1}
 .joininfo .url{font-size:13px;color:var(--muted);word-break:break-all}
 .plist{display:flex;flex-wrap:wrap;gap:8px}
-.plist span{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:rgba(0,0,0,.25);border:1px solid var(--line);font-weight:600}
+.plist > span{display:inline-flex;align-items:center;gap:8px;padding:6px 12px 6px 6px;border-radius:999px;background:rgba(0,0,0,.25);border:1px solid var(--line);font-weight:600}
 .plist .empty{color:var(--muted);font-weight:500;border-style:dashed}
 @media (max-width:700px){
   .lobby{grid-template-columns:1fr}
@@ -437,6 +452,7 @@ input[type=range]{width:100%;height:36px;accent-color:var(--brass);background:tr
     <div><span class="lbl" id="hd-paylbl">Who pays who</span><div class="pays" id="hd-pays"></div><p class="hint" id="hd-rate"></p></div>
     <div class="hstats" id="hd-stats"></div>
     <div><span class="lbl">Results</span><div class="tbl-wrap"><table class="settle" id="hd-table"></table></div></div>
+    <div><span class="lbl">Player stats</span><div id="hd-pstats"></div></div>
     <div><span class="lbl">Recent hands</span><div class="tbl-wrap"><table class="settle" id="hd-hands"></table></div></div>
     <div id="hd-actions" style="display:grid;gap:10px"></div>
   </div>
@@ -2979,7 +2995,7 @@ const STREETS = ['Pre-flop', 'Flop', 'Turn', 'River'];
 const BOARD = [0, 3, 4, 5];
 const store = {
   get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } },
-  set(k, v){ try { localStorage.setItem(k, v); } catch(e){} },
+  set(k, v){ try { localStorage.setItem(k, v); return true; } catch(e){ return false; } },
   del(k){ try { localStorage.removeItem(k); } catch(e){} },
   json(k){ try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch(e){ return null; } }
 };
@@ -2996,6 +3012,58 @@ async function tagOf(pid){
     return 'f' + (h >>> 0).toString(16);
   }
 }
+/* ---- signing (WebCrypto ECDSA P-256) ----
+   The relays are public, so anyone can read and write a table's topics. Phones sign every request with their own key
+   (a seat belongs to a key, and no secret is ever sent), and the table signs everything it publishes. Phones and
+   viewers only believe the table key named by the QR code, or without one, the first table key they saw.
+   A signed message travels as "<public key>.<signature>.<text>". */
+const CRYPTO_OK = !!(window.isSecureContext && window.crypto && crypto.subtle);
+const EC = { name: 'ECDSA', namedCurve: 'P-256' }, SIGN = { name: 'ECDSA', hash: 'SHA-256' };
+const te = new TextEncoder();
+const b64u = buf => { let s = ''; new Uint8Array(buf).forEach(b => { s += String.fromCharCode(b); }); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); };
+const unb64u = s => Uint8Array.from(atob(String(s).replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+async function newKeys(){
+  const k = await crypto.subtle.generateKey(EC, true, ['sign', 'verify']);
+  return { jwk: await crypto.subtle.exportKey('jwk', k.privateKey), pub: b64u(await crypto.subtle.exportKey('raw', k.publicKey)), priv: k.privateKey };
+}
+/* A saved private key (JWK) back to a signing key plus its public key. */
+async function loadKeys(jwk){
+  try {
+    const priv = await crypto.subtle.importKey('jwk', jwk, EC, false, ['sign']);
+    const pk = await crypto.subtle.importKey('jwk', { kty: 'EC', crv: 'P-256', x: jwk.x, y: jwk.y, ext: true }, EC, true, ['verify']);
+    return { jwk, priv, pub: b64u(await crypto.subtle.exportKey('raw', pk)) };
+  } catch(e){ return null; }
+}
+const pubCache = new Map();
+function verifyKey(k){
+  if (!pubCache.has(k)){ if (pubCache.size > 300) pubCache.clear(); pubCache.set(k, crypto.subtle.importKey('raw', unb64u(k), EC, false, ['verify']).catch(() => null)); }
+  return pubCache.get(k);
+}
+async function seal(keys, text){ return keys.pub + '.' + b64u(await crypto.subtle.sign(SIGN, keys.priv, te.encode(text))) + '.' + text; }
+/* → { k, text } when the signature is good, otherwise null */
+async function unseal(s){
+  if (typeof s !== 'string') return null;
+  const a = s.indexOf('.'), b = a > 0 ? s.indexOf('.', a + 1) : -1;
+  if (b < 0 || a > 120 || b - a > 120) return null;
+  const k = s.slice(0, a), text = s.slice(b + 1);
+  try { const key = await verifyKey(k); if (!key || !(await crypto.subtle.verify(SIGN, key, unb64u(s.slice(a + 1, b)), te.encode(text)))) return null; } catch(e){ return null; }
+  return { k, text };
+}
+/* A short fingerprint of the table's key, carried in the join link and QR code. */
+async function keyFp(k){ try { return b64u(await crypto.subtle.digest('SHA-256', unb64u(k))).slice(0, 22); } catch(e){ return ''; } }
+/* Read a message from the table. tr = { hk: key we trust, fp: fingerprint from the QR link, bad, save }. */
+async function fromTable(s, tr){
+  const a = typeof s === 'string' ? s.indexOf('.') : -1; if (a <= 0) return null;
+  const k = s.slice(0, a);
+  if (tr.hk && k !== tr.hk){ tr.bad = true; return null; }
+  if (!tr.hk && tr.fp && (await keyFp(k)) !== tr.fp){ tr.bad = true; return null; }
+  const o = await unseal(s); if (!o) return null;
+  if (tr.hk && tr.hk !== k){ tr.bad = true; return null; }
+  if (!tr.hk){ tr.hk = k; if (tr.save) tr.save(k); }
+  try { return JSON.parse(o.text); } catch(e){ return null; }
+}
+/* The text inside a signed message without checking it (only for the join screen's avatar hints). */
+const envText = s => { const a = s.indexOf('.'), b = a > 0 ? s.indexOf('.', a + 1) : -1; return b > 0 ? s.slice(b + 1) : s; };
 function cleanName(s){ return String(s || '').replace(/[\u0000-\u001f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 14); }
 let toastT = 0;
 function placeToast(){
@@ -3223,8 +3291,9 @@ function maxTo(st, i){
   return Math.min(p.bet + p.stack, cover);
 }
 function log(text){ S.log.push(text); if (S.log.length > 30) S.log.shift(); }
-function newPlayer(name, pid, tag, av){
-  return { name, pid, tag, av: freeAvatar(S, av), stack: S.startStack, bought: S.startStack, bet: 0, committed: 0, folded: true, allIn: false, acted: false, locked: false, out: false, last: S.hand ? 'Dealt in next hand' : '', topup: false, leaving: false };
+/* key: the public key of the seat's phone (null for a seat without one). ctr: the newest request number seen from it. */
+function newPlayer(name, key, tag, av){
+  return { name, key, ctr: 0, tag, av: freeAvatar(S, av), stack: S.startStack, bought: S.startStack, bet: 0, committed: 0, folded: true, allIn: false, acted: false, locked: false, out: false, last: S.hand ? 'Dealt in next hand' : '', topup: false, leaving: false };
 }
 
 /* ---- buying in ----
@@ -3286,13 +3355,17 @@ function startHand(){
   S.lastDealt = S.players.filter(p => !p.out).map(p => p.tag); S.lastWin = [];
   S.handSB = S.sb; S.handBB = S.bb;
   S.dealer = nextSeat(S.dealer, p => !p.out);
+  // the hand's action log starts with who was dealt in, the button first
+  const n = S.players.length, order = [];
+  for (let k = 0; k < n; k++){ const q = P((S.dealer + k) % n); if (!q.out) order.push(q.name); }
+  S.cur = { p: order, a: [] };
   // Fewer than 4 players: one blind (the big blind amount), posted by the player left of the button.
   S.single = liveN < 4;
   if (S.single){ S.sbIdx = -1; S.bbIdx = nextSeat(S.dealer, p => !p.out); }
   else { S.sbIdx = nextSeat(S.dealer, p => !p.out); S.bbIdx = nextSeat(S.sbIdx, p => !p.out); }
-  if (!S.single){ const sbP = P(S.sbIdx); put(sbP, S.sb); sbP.last = `Small blind ${fmt(sbP.bet)}`; }
+  if (!S.single){ const sbP = P(S.sbIdx); put(sbP, S.sb); sbP.last = `Small blind ${fmt(sbP.bet)}`; track(sbP, 'sb', sbP.bet); }
   const bbP = P(S.bbIdx);
-  put(bbP, S.bb); bbP.last = `${S.single ? 'Blind' : 'Big blind'} ${fmt(bbP.bet)}`;
+  put(bbP, S.bb); bbP.last = `${S.single ? 'Blind' : 'Big blind'} ${fmt(bbP.bet)}`; track(bbP, 'bb', bbP.bet);
   S.currentBet = S.bb; S.minRaise = S.bb;
   log(`Hand ${S.hand}: ${P(S.dealer).name} has the button`);
   return progress(S.bbIdx);
@@ -3361,18 +3434,26 @@ function buildPots(){
   }
   return pots.filter(p => p.amount > 0);
 }
+/* Log one action for the stats: [street, seat counted from the button, action, chips put in, bet this street, all in].
+   Actions: sb/bb blinds, f fold, x check, c call, b bet, r raise. */
+function track(p, k, add){
+  if (!S.cur) return;
+  const i = S.cur.p.indexOf(p.name);
+  if (i >= 0) S.cur.a.push([S.street, i, k, add, p.bet, p.allIn ? 1 : 0]);
+}
 function engineAct(i, kind, to){
   const p = P(i), toCall = Math.max(0, S.currentBet - p.bet);
   if (kind === 'check' && toCall > 0) kind = 'call';
-  const before = p.bet; let fx = '';
-  if (kind === 'fold'){ p.folded = true; p.last = 'Folded'; fx = 'fold'; }
-  else if (kind === 'check'){ p.last = 'Checked'; fx = 'check'; }
-  else if (kind === 'call'){ put(p, toCall); p.last = p.allIn ? `All in for ${fmt(p.bet)}` : `Called ${fmt(p.bet - before)}`; fx = p.allIn ? 'allin' : 'call'; }
+  if (kind === 'call' && toCall === 0) kind = 'check';
+  const before = p.bet; let fx = '', tk = '';
+  if (kind === 'fold'){ p.folded = true; p.last = 'Folded'; fx = 'fold'; tk = 'f'; }
+  else if (kind === 'check'){ p.last = 'Checked'; fx = 'check'; tk = 'x'; }
+  else if (kind === 'call'){ put(p, toCall); p.last = p.allIn ? `All in for ${fmt(p.bet)}` : `Called ${fmt(p.bet - before)}`; fx = p.allIn ? 'allin' : 'call'; tk = 'c'; }
   else {
     const max = maxTo(S, i);
     const target = kind === 'allin' ? max : Math.min(Math.max(Math.round(to) || 0, 0), max);
     if (target <= S.currentBet){
-      put(p, target - p.bet); p.last = p.allIn ? `All in for ${fmt(p.bet)}` : `Called ${fmt(p.bet - before)}`; fx = p.allIn ? 'allin' : 'call';
+      put(p, target - p.bet); p.last = p.allIn ? `All in for ${fmt(p.bet)}` : `Called ${fmt(p.bet - before)}`; fx = p.allIn ? 'allin' : 'call'; tk = 'c';
     } else {
       const opening = S.currentBet === 0;
       put(p, target - p.bet);
@@ -3384,12 +3465,13 @@ function engineAct(i, kind, to){
       S.currentBet = p.bet;
       // a capped all-in keeps chips, so say why: nobody can match more
       p.last = p.allIn ? `All in for ${fmt(p.bet)}${p.stack > 0 ? ' (covers everyone)' : ''}` : opening ? `Bet ${fmt(p.bet)}` : `Raised to ${fmt(p.bet)}`;
-      fx = p.allIn ? 'allin' : (opening ? 'bet' : 'raise');
+      fx = p.allIn ? 'allin' : (opening ? 'bet' : 'raise'); tk = opening ? 'b' : 'r';
     }
   }
   p.acted = true;
   log(`${p.name}: ${p.last.toLowerCase()}`);
   const moved = p.bet - before;
+  track(p, tk, moved);
   const after = progress(i);
   return { fx, moved, after };
 }
@@ -3403,10 +3485,22 @@ function legal(i, kind, to){
   if (kind === 'raise') return !p.locked && Number.isFinite(to) && to >= Math.min(minTo, max) && to <= max && to > S.currentBet;
   return false;
 }
-function recordHand(pot, wins){
+/* sd: who was still in at the showdown (none when everyone else folded). */
+function recordHand(pot, wins, sd){
   if (!S.hands) S.hands = [];
-  S.hands.push({ n: S.hand, pot, t: Date.now(), win: wins });
+  const h = { n: S.hand, pot, t: Date.now(), win: wins };
+  if (S.cur){ h.p = S.cur.p; h.a = S.cur.a; }
+  if (sd) h.sd = sd;
+  S.hands.push(h); S.cur = null;
   if (S.hands.length > 1000) S.hands.shift();
+}
+/* A seat moved to a new phone, so its tag changed: the last hand's dealt-in and winner lists follow it,
+   or a 7-2 bounty could skip the player or never be offered. */
+function retag(st, from, to){
+  if (!from || from === to) return;
+  const sw = a => Array.isArray(a) ? a.map(t => t === from ? to : t) : a;
+  st.lastDealt = sw(st.lastDealt); st.lastWin = sw(st.lastWin);
+  st.players.concat(st.gone || []).forEach(p => (p.owe || []).forEach(o => { if (o.tag === from) o.tag = to; }));
 }
 function winUncontested(w){
   const total = potTotal(), p = P(w);
@@ -3429,7 +3523,7 @@ function engineAward(){
   });
   S.players.forEach((q, i) => { q.last = gains[i] ? `Won ${fmt(gains[i])}` : ''; });
   const ws = Object.keys(gains).map(Number);
-  recordHand(S.pots.reduce((a, pt) => a + pt.amount, 0), ws.map(i => [P(i).name, gains[i]]));
+  recordHand(S.pots.reduce((a, pt) => a + pt.amount, 0), ws.map(i => [P(i).name, gains[i]]), S.players.filter(q => !q.folded && !q.out).map(q => q.name));
   S.result = ws.length ? ws.map(i => `${P(i).name} +${fmt(gains[i])}`).join(' · ') : 'Pot paid out';
   S.resultSub = ws.length > 1 ? 'Pot split' : 'Showdown'; S.lastWin = ws.map(i => P(i).tag);
   log(S.result);
@@ -3439,22 +3533,34 @@ function engineAward(){
 }
 
 /* ================= table device (host) ================= */
-const H = { code: null, client: null, broker: 0, online: {}, viewers: {}, pubN: 0, fxN: 0, hist: [], last: { v: 0 }, connected: false };
+/* keys: the table's signing key. claims: phones asking for a seat that already has their name (waiting for the host).
+   own: the last few signed states this table published, to spot a stored state someone else replaced. */
+const H = { code: null, client: null, broker: 0, online: {}, viewers: {}, pubN: 0, fxN: 0, hist: [], last: { v: 0 }, connected: false,
+            keys: null, fp: '', claims: [], own: [], saveFail: false, pubQ: null, fixT: 0 };
 let VIEW = false;                       // true when this screen only watches a table
 const isOn = p => VIEW ? !!p.on : !!H.online[p.tag];
 const hostKey = code => 'hgc-host:' + code;
-function hostSave(){ if (S) S.table.lastAt = Date.now(); store.set(hostKey(H.code), JSON.stringify({ S, pubN: H.pubN, fxN: H.fxN, broker: H.broker })); if (!S || !S.closed) store.set('hgc-host-last', H.code); }
+/* If the device's storage is full the save fails; the table keeps running, and the bar says so until a save works again. */
+function hostSave(){
+  if (S) S.table.lastAt = Date.now();
+  const ok = store.set(hostKey(H.code), JSON.stringify({ S, pubN: H.pubN, fxN: H.fxN, broker: H.broker, key: H.keys ? H.keys.jwk : null }));
+  if (!S || !S.closed) store.set('hgc-host-last', H.code);
+  if (ok === H.saveFail){ H.saveFail = !ok; if (S && !VIEW) hostRenderDock(); }
+}
 function snap(){ H.hist.push(JSON.stringify(S)); if (H.hist.length > 80) H.hist.shift(); }
 function topic(code, t){ return NS + code + '/' + t; }
 function joinUrl(){
   const u = new URL(location.href); u.search = '';
   u.searchParams.set('t', H.code); if (H.broker) u.searchParams.set('b', H.broker);
   if (QS.get('broker')) u.searchParams.set('broker', QS.get('broker'));
+  if (H.fp) u.searchParams.set('k', H.fp);
   u.hash = '';
   return u.toString();
 }
 
-function hostCreate(){
+let creating = false;
+async function hostCreate(){
+  if (creating) return;
   const err = $('#c-err');
   const max = +$('#c-max').textContent, stack = toInt($('#c-stack').value, 0), bb = toInt($('#c-bb').value, 0);
   const sb = max < 4 ? Math.max(1, Math.min(toInt($('#c-sb').value, 1), bb || 1)) : toInt($('#c-sb').value, 0);
@@ -3464,23 +3570,40 @@ function hostCreate(){
   if (bb < sb){ err.textContent = 'The big blind must be at least the small blind.'; return; }
   if (stack < bb * 2){ err.textContent = 'Give everyone at least two big blinds to start.'; return; }
   err.textContent = '';
+  let keys;
+  creating = true;
+  try { keys = await newKeys(); } catch(e){ err.textContent = "This browser couldn't make the table's security key. Open the page from its https link."; return; }
+  finally { creating = false; }
+  const fp = await keyFp(keys.pub);
   const count = (toInt(store.get('hgc-table-count'), 0) || 0) + 1;
   store.set('hgc-table-count', String(count));
   const code = makeId(6);
   S = { table: { code, label: `Table ${count}`, max, created: Date.now() }, players: [], gone: [], startStack: stack, sb, bb, handSB: sb, handBB: bb,
         dealer: -1, sbIdx: -1, bbIdx: -1, street: 0, currentBet: 0, minRaise: bb, toAct: -1, hand: 0, stage: 'lobby', result: '', resultSub: '',
         pots: null, runout: false, seq: 0, fx: null, log: [], closed: false, bounty, lastDealt: [], lastWin: [], bountyHand: 0, money };
-  Object.assign(H, { code, pubN: 0, fxN: 0, hist: [], online: {}, broker: 0, last: { v: 0 } });
+  Object.assign(H, { code, pubN: 0, fxN: 0, hist: [], online: {}, broker: 0, last: { v: 0 }, keys, fp, claims: [], own: [], saveFail: false });
   log(`${S.table.label} opened`);
   hostSave();
   hostStart(0);
 }
-function hostResume(code){
+/* Older tables: phone seats had a secret id instead of a key, so each player claims their seat once (the host approves).
+   A player who left and someone seated could also share a name, which the settle-up can't tell apart. */
+function upgradeTable(st){
+  st.players.forEach(p => { delete p.pid; delete p.rid; if (p.key === undefined) p.key = null; if (!(p.ctr >= 0)) p.ctr = 0; });
+  const used = new Set(st.players.map(p => p.name.toLowerCase()));
+  (st.gone || []).forEach(g => { let nm = g.name, k = 2; while (used.has(nm.toLowerCase())) nm = `${g.name.slice(0, 9)} (${k++})`; g.name = nm; used.add(nm.toLowerCase()); });
+}
+async function hostResume(code){
   AD.paused = true; clearInterval(AD.timer); AD.timer = 0; AD.at = 0;
   const rec = store.json(hostKey(code)); if (!rec || !rec.S) return false;
-  if (ensureAvatars(rec.S)) store.set(hostKey(code), JSON.stringify(rec));
-  S = rec.S;
-  Object.assign(H, { code, pubN: rec.pubN || 0, fxN: rec.fxN || 0, hist: [], online: {}, broker: rec.broker || 0, last: { v: 99 } });
+  let keys = rec.key ? await loadKeys(rec.key) : null;
+  if (!keys){ try { keys = await newKeys(); } catch(e){ return false; } }
+  const fp = await keyFp(keys.pub);
+  upgradeTable(rec.S); ensureAvatars(rec.S);
+  S = rec.S; VIEW = false;
+  Object.assign(H, { code, pubN: rec.pubN || 0, fxN: rec.fxN || 0, hist: [], online: {}, broker: rec.broker || 0, last: { v: 99 },
+                     keys, fp, claims: [], own: [], saveFail: false });
+  hostSave();
   hostStart(H.broker, true);
   if (S.stage === 'done' && !S.closed){ AD.paused = false; autoDeal(true); }
   return true;
@@ -3506,7 +3629,7 @@ function hostConnect(idx, allowFailover){
     if (H.client !== c) return;
     gotOnline = true; clearTimeout(failover); H.connected = true; netDot('#h-net', 'on'); banner('');
     H.viewers = {}; renderWatchers();          // the relay resends every screen still watching when we subscribe
-    c.subscribe([topic(code, 'cmd'), topic(code, 'presence/+'), topic(code, 'watch/+')], { qos: 1 });
+    c.subscribe([topic(code, 'cmd'), topic(code, 'presence/+'), topic(code, 'watch/+'), topic(code, 'state')], { qos: 1 });
     c.publish(topic(code, 'host'), '1', { qos: 1, retain: true });
     hostSave(); hostPublish(); hostRender();
   });
@@ -3527,45 +3650,70 @@ function hostConnect(idx, allowFailover){
       renderWatchers();
       return;
     }
-    let m; try { m = JSON.parse(s); } catch(e){ return; }
-    hostCmd(m).catch(() => {});
+    if (t.endsWith('/state')){
+      // The stored state should be the one this table signed last. If something else replaced it (an old copy, or junk),
+      // put ours back, so phones that connect now get the real table.
+      if (!H.own.includes(s) && !H.fixT) H.fixT = setTimeout(() => {
+        H.fixT = 0; const last = H.own[H.own.length - 1];
+        if (H.client === c && H.connected && last) c.publish(topic(code, 'state'), last, { qos: 1, retain: true });
+      }, 1500);
+      return;
+    }
+    hostCmd(s).catch(() => {});
   });
 }
-/* A shallow copy is enough because it is turned into text straight away. The hand history (up to 1,000 hands)
-   stays on the table device: phones and viewers never read it, and it would ride along with every action. */
+/* A shallow copy is enough because it is turned into text straight away. The hand history (up to 1,000 hands) and the
+   current hand's action log stay on the table device: phones and viewers never read them, and they'd ride along with every action. */
 function hostPublic(){
-  const { hands, ...pub } = S;
-  pub.players = S.players.map(({ pid, ...p }) => ({ ...p, on: !!H.online[p.tag] }));
+  const { hands, cur, ...pub } = S;
+  pub.players = S.players.map(({ key, ctr, pid, rid, ...p }) => ({ ...p, on: !!H.online[p.tag] }));
   pub.v = ++H.pubN;
   return pub;
 }
 function hostPublish(){
-  if (!H.client || !H.connected || !S) return;
-  H.client.publish(topic(H.code, 'state'), JSON.stringify(hostPublic()), { qos: 1, retain: true });
+  if (!H.client || !H.connected || !S || !H.keys) return;
+  hostSend(topic(H.code, 'state'), JSON.stringify(hostPublic()), true);
 }
-function hostReply(tag, obj){ if (H.client && H.connected) H.client.publish(topic(H.code, 'to/' + tag), JSON.stringify(obj), { qos: 1 }); }
+/* Replies name the phone they're for, so a reply can't be copied to another player. */
+function hostReply(tag, obj){ if (H.client && H.connected && H.keys) hostSend(topic(H.code, 'to/' + tag), JSON.stringify({ ...obj, to: tag }), false); }
+/* Signing takes a moment, so sends queue up in order: the stored state must always end up being the newest one. */
+function hostSend(t, text, retain){
+  const c = H.client, keys = H.keys;
+  H.pubQ = (H.pubQ || Promise.resolve()).then(async () => {
+    const env = await seal(keys, text);
+    if (H.client !== c || !H.connected) return;
+    if (retain){ H.own.push(env); if (H.own.length > 8) H.own.shift(); }
+    c.publish(t, env, { qos: 1, retain });
+  }).catch(() => {});
+}
 /* Every change to the table goes through here: bump sequence, store, broadcast, redraw, play effects. */
 function commit(fx, opts = {}){
   if (opts.seq !== false) S.seq++;
   if (fx) S.fx = { n: ++H.fxN, ...fx };
   hostSave(); hostPublish(); hostRender(); if (fx) hostFx(S.fx, opts);
 }
-async function hostCmd(m){
-  if (!S || !m || typeof m !== 'object' || typeof m.pid !== 'string' || m.pid.length < 8 || m.pid.length > 64) return;
-  const tag = await tagOf(m.pid);
-  const i = S.players.findIndex(p => p.pid === m.pid);
+/* A request from a phone: { type, code, c, ... } signed by the phone's key. The key decides the seat. */
+async function hostCmd(raw){
+  if (!S || typeof raw !== 'string' || raw.length > 4000) return;
+  const o = await unseal(raw); if (!o || !S) return;
+  let m; try { m = JSON.parse(o.text); } catch(e){ return; }
+  if (!m || typeof m !== 'object' || m.code !== H.code || !Number.isFinite(m.c)) return;
+  const key = o.k, tag = await tagOf(key);
+  if (!S) return;
+  const i = S.players.findIndex(p => p.key === key);
   if (S.closed){ hostReply(tag, { type: 'error', msg: 'This table is closed.' }); return; }
+  // Each phone numbers its requests. One that isn't newer than the last from that seat is a resend we already handled, or a replay.
+  if (i >= 0){ if (m.c <= (P(i).ctr || 0)) return; P(i).ctr = m.c; }
   switch (m.type){
     case 'hello': hostPublish(); break;
-    case 'join': return hostJoin(m.pid, tag, m.name, Number(m.av));
+    case 'join': return hostJoin(key, tag, m.name, Number(m.av), m.c);
     case 'act': {
       if (i < 0) return hostReply(tag, { type: 'error', msg: 'You are not seated at this table.' });
       if (S.stage !== 'betting' || S.toAct !== i) return hostReply(tag, { type: 'error', msg: "It's not your turn." });
-      if (m.rid && P(i).rid === m.rid) return;            // a resend of a tap we already applied
       if (m.seq !== S.seq) return hostReply(tag, { type: 'error', msg: 'The table moved on. Check and try again.' });
       const kind = m.kind, to = Number(m.to);
       if (!['fold', 'check', 'call', 'raise', 'allin'].includes(kind) || !legal(i, kind, to)) return hostReply(tag, { type: 'error', msg: "That action isn't allowed right now." });
-      hostAct(i, kind, to, { rid: m.rid });
+      hostAct(i, kind, to);
       break;
     }
     case 'topup': if (i >= 0) hostTopUp(i, tag, Number.isFinite(+m.amt) && m.amt !== null && m.amt !== undefined ? +m.amt : undefined); break;
@@ -3581,28 +3729,66 @@ async function hostCmd(m){
   }
 }
 function refreshOver(){ if (S.stage === 'over' && funded() >= 2){ S.stage = 'done'; AD.paused = false; setTimeout(() => autoDeal(true), 0); } }
-function hostJoin(pid, tag, raw, want){
+const sameName = (a, b) => a.toLowerCase() === b.toLowerCase();
+function hostJoin(key, tag, raw, want, c){
   const name = cleanName(raw);
   if (!name) return hostReply(tag, { type: 'error', msg: 'Enter your name.' });
-  const i = S.players.findIndex(p => p.pid === pid);
+  const i = S.players.findIndex(p => p.key === key);
   if (i >= 0){ hostReply(tag, { type: 'joined', name: P(i).name }); hostPublish(); return; }
-  const j = S.players.findIndex(p => p.name.toLowerCase() === name.toLowerCase());
-  if (j >= 0){
-    if (H.online[P(j).tag]) return hostReply(tag, { type: 'error', msg: `${name} is already playing on another phone. Pick a different name.` });
-    const p = P(j); p.pid = pid; p.tag = tag;
-    log(`${p.name} is back on a new phone`);
-    commit(null, { seq: false });
-    toast(`${p.name} reconnected`);
-    return hostReply(tag, { type: 'joined', name: p.name });
+  const j = S.players.findIndex(p => sameName(p.name, name)), g = (S.gone || []).find(x => sameName(x.name, name));
+  if (j >= 0 || g){
+    // The name belongs to a seat (or to someone who left). Typing a name isn't proof, so the table device decides.
+    if (g && S.players.length >= S.table.max) return hostReply(tag, { type: 'error', msg: `${S.table.label} is full (${S.table.max} players).` });
+    const cl = { key, tag, c, av: want, name: j >= 0 ? P(j).name : g.name, back: !!g }, at = H.claims.findIndex(x => x.key === key);
+    if (at >= 0) H.claims[at] = cl; else { H.claims.push(cl); if (H.claims.length > 6) H.claims.shift(); Snd.join(); }
+    hostRenderDock();
+    return hostReply(tag, { type: 'wait', msg: `The table device has to let you in as ${cl.name}. Ask the host to tap Let them in.` });
   }
   if (S.players.length >= S.table.max) return hostReply(tag, { type: 'error', msg: `${S.table.label} is full (${S.table.max} players).` });
-  const np = newPlayer(name, pid, tag, avOk(want) ? want : -1);
+  const np = newPlayer(name, key, tag, avOk(want) ? want : -1);
+  np.ctr = c;
   S.players.push(np);
   log(`${name} sat down${S.hand ? ', dealt in next hand' : ''}`);
   refreshOver();
   commit({ kind: 'join', tag }, { seq: false });
   hostReply(tag, { type: 'joined', name });
   if (avOk(want) && np.av !== want) hostReply(tag, { type: 'info', msg: `${AVATARS[want].name} was taken, so you're ${AVATARS[np.av].name}. Change it from Menu.` });
+}
+/* Someone who left comes back to the same name: their chips, buy-ins and any 7-2 debt come back with them,
+   so the settle-up keeps one row per person. */
+function restoreGone(name, key, tag, av, c){
+  const g = (S.gone || []).findIndex(x => sameName(x.name, name));
+  if (g < 0 || S.players.length >= S.table.max) return null;
+  const back = S.gone.splice(g, 1)[0], np = newPlayer(back.name, key, tag, av);
+  Object.assign(np, { stack: back.stack, bought: back.bought, ctr: c || 0 }, back.owe ? { owe: back.owe } : {});
+  S.players.push(np);
+  log(`${np.name} came back with ${fmt(np.stack)}${S.hand ? ', dealt in next hand' : ''}`);
+  refreshOver();
+  commit({ kind: 'join', tag }, { seq: false });
+  return np;
+}
+/* The host answers a claim: yes moves the seat to the new phone (or brings back someone who left), no turns it away. */
+function hostClaim(yes){
+  const cl = H.claims.shift(); if (!cl || !S) return;
+  if (!yes){
+    hostReply(cl.tag, { type: 'error', msg: `The table didn't let you in as ${cl.name}. If that isn't you, pick a different name.` });
+    return hostRenderDock();
+  }
+  // any other phone asking for the same seat is turned away
+  H.claims = H.claims.filter(x => { if (!sameName(x.name, cl.name)) return true; hostReply(x.tag, { type: 'error', msg: `${cl.name}'s seat went to another phone.` }); return false; });
+  const j = S.players.findIndex(p => sameName(p.name, cl.name));
+  if (j >= 0){
+    const p = P(j), old = p.tag;
+    p.key = cl.key; p.tag = cl.tag; p.ctr = cl.c || 0;
+    retag(S, old, cl.tag); delete H.online[old];
+    log(`${p.name} moved to a new phone`);
+    commit(null, { seq: false });
+    toast(`${p.name} is on a new phone`);
+    return hostReply(cl.tag, { type: 'joined', name: p.name });
+  }
+  const np = restoreGone(cl.name, cl.key, cl.tag, avOk(cl.av) ? cl.av : -1, cl.c);
+  if (!np){ hostReply(cl.tag, { type: 'error', msg: `${S.table.label} is full, or that seat is gone. Pick a different name.` }); return hostRenderDock(); }
+  hostReply(cl.tag, { type: 'joined', name: np.name });
 }
 function hostTopUp(i, tag, want){
   const p = P(i), lim = buyLimits(S, p);
@@ -3638,7 +3824,6 @@ function hostAct(i, kind, to, opts = {}){
   const seatEl = $(`.hseat[data-i="${i}"] .hole`);
   const foldRect = seatEl ? seatEl.getBoundingClientRect() : null;
   const tag = P(i).tag, name = P(i).name;
-  if (opts.rid) P(i).rid = opts.rid;
   const r = engineAct(i, kind, to);
   commit({ kind: r.fx, tag, name, moved: r.moved, after: r.after }, { foldRect });
   if (S.stage === 'done'){ AD.paused = false; autoDeal(true); }
@@ -3701,11 +3886,15 @@ function hostAward(){
 function hostUndo(){
   if (!H.hist.length) return;
   const cur = S, prev = JSON.parse(H.hist.pop());
-  // People who sat down after the snapshot keep their seats; reconnected phones keep their new ids.
+  // People who sat down (or came back) after the snapshot keep their seats; seats that moved to a new phone keep it.
   cur.players.forEach(p => {
     const q = prev.players.find(x => x.name === p.name);
-    if (q){ q.pid = p.pid; q.tag = p.tag; q.topup = q.topup || p.topup; q.leaving = q.leaving || p.leaving; return; }
-    if (prev.gone.some(g => g.name === p.name)) return;
+    if (q){
+      if (q.tag !== p.tag) retag(prev, q.tag, p.tag);
+      q.key = p.key; q.tag = p.tag; q.ctr = Math.max(q.ctr || 0, p.ctr || 0); q.topup = q.topup || p.topup; q.leaving = q.leaving || p.leaving; return;
+    }
+    const g = prev.gone.findIndex(x => x.name === p.name);
+    if (g >= 0) prev.gone.splice(g, 1);
     prev.players.push({ ...p, bet: 0, committed: 0, folded: true, allIn: false, acted: false, locked: false, topup: false, last: prev.hand ? 'Dealt in next hand' : '' });
   });
   prev.seq = Math.max(prev.seq, cur.seq) + 1;
@@ -4078,7 +4267,17 @@ function hostRenderDock(){
   if (S.closed){ cls = ''; const pl = settlePlan(S); msg = `<b>Table closed</b><span>${pl.pays.length ? pl.pays.map(x => `${esc(x.from)} pays ${esc(x.to)} ${moneyText(x.chips, pl.m)}`).join(' · ') : 'Everyone finished even.'}</span>`; btns = VIEW ? `<button class="btn b-raise" data-h="home">Back to start</button>` : ''; }
   else if (VIEW) btns = '';
   else if (S.stage === 'lobby' || S.stage === 'over' || (S.stage === 'done' && !(AD.at && !AD.paused))) btns = `<button class="btn b-fold" data-h="close">Close table</button>` + btns;
-  setHTML(d, `<div class="msg${cls}">${capParts(msg)}</div><div class="btns">${btns}</div>`);
+  let pre = '';
+  if (!VIEW && H.saveFail) pre += `<div class="hnote warn"><div><b>This table isn't being saved</b><span>This device's storage is full. Download the table file from Menu, then delete old tables in Past games (download their results first).</span></div></div>`;
+  if (!VIEW && !S.closed && H.claims.length){
+    const c = H.claims[0], seat = S.players.find(p => sameName(p.name, c.name)), g = (S.gone || []).find(x => sameName(x.name, c.name));
+    const more = H.claims.length > 1 ? ` ${H.claims.length - 1} more waiting.` : '';
+    const why = seat ? `${seat.key && isOn(seat) ? 'Their seat is still connected on another phone. ' : ''}Only let them in if ${esc(c.name)} is really on a new phone.`
+                     : `They left with ${fmt(g ? g.stack : 0)} and come back with those chips.`;
+    pre += `<div class="hnote"><div><b>${esc(c.name)} wants ${seat ? 'their seat on a new phone' : 'to come back'}</b><span>${why}${more}</span></div>
+      <div class="btns"><button class="btn b-fold" data-h="claim-no">Not them</button><button class="btn b-raise" data-h="claim-yes">Let them in</button></div></div>`;
+  }
+  setHTML(d, `${pre}<div class="msg${cls}">${capParts(msg)}</div><div class="btns">${btns}</div>`);
   // the bar can grow a row (7-2 buttons, countdown) and squeeze the table: re-fit the seats now, not on the next resize callback
   relayoutTable();
 }
@@ -4117,6 +4316,7 @@ $('#h-dock').addEventListener('click', e => {
     if (!b.classList.contains('armed')){ b.classList.add('armed'); b.textContent = 'Tap again to close'; setTimeout(() => { if (b.isConnected){ b.classList.remove('armed'); b.textContent = 'Close table'; } }, 3500); return; }
     return hostClose();
   }
+  if (a === 'claim-yes' || a === 'claim-no') return hostClaim(a === 'claim-yes');
   if (a === 'deal') hostDeal();
   else if (a === 'pause'){ AD.paused = true; autoDeal(); hostRenderDock(); }
   else if (a === 'bounty') hostBounty(b.dataset.tag);
@@ -4213,9 +4413,11 @@ function renderHostMenu(){
       <p class="hint" id="m-bmsg">After a hand, tap the 7-2 offsuit button for a winner who shows 7-2 of different suits. Suited 7-2 doesn't count. Set 0 to turn it off.</p></div>
     ${S.players.length < S.table.max ? `<div class="m-sec"><h3>Add a player without a phone</h3>
       <div class="add-row"><input class="txt" id="m-add" maxlength="14" placeholder="Name" autocomplete="off"><button class="btn-sec" data-m="add">Add seat</button></div>
-      <p class="hint">You act for them by tapping their seat. If they later join from a phone with the same name, the seat moves to their phone.</p></div>` : ''}
+      <p class="hint">You act for them by tapping their seat. If they later join from a phone with the same name, you can move the seat to their phone. A name that left earlier comes back with the chips it left with.</p></div>` : ''}
     <div class="m-sec"><h3>Settle up</h3><p class="hint" style="margin:0 0 10px">Starting stack ${fmt(S.startStack)}. Buy-ins only refill to that amount.${between ? '' : ' Figures settle when this hand ends.'}</p>
       <div class="tbl-wrap"><table class="settle"><thead><tr><th>Player</th><th class="num">Bought</th><th class="num">Chips</th><th class="num">Net</th></tr></thead><tbody>${rows || '<tr><td colspan="4">Nobody yet</td></tr>'}</tbody></table></div></div>
+    <div class="m-sec"><h3>Player stats</h3>${statsHTML(S)}
+      <button class="btn-sec" data-m="csv">Download spreadsheet (results, stats, every action)</button></div>
     <div class="m-sec"><h3>Move to another table</h3>
       <p class="hint" style="margin:0 0 8px">Saves every seat, stack, buy-in and hand so far to a file. On the new tablet, choose Create a table → Import file. Players rejoin there with the same name and keep their chips.${between ? '' : ' Available once this hand is paid out.'}</p>
       <div style="display:grid;gap:8px"><button class="btn-sec" data-m="export"${between ? '' : ' disabled'} style="margin:0">Download table file</button>
@@ -4227,7 +4429,7 @@ $('#menu-body').addEventListener('click', e => {
   if (ab && !ab.disabled && Pn.client && Pn.connected){
     const v = +ab.dataset.av; joinAv = v; store.set('hgc-av', String(v));
     $$('#p-avpick .avopt').forEach(x => { x.classList.toggle('on', x === ab); x.setAttribute('aria-pressed', x === ab); });
-    Pn.client.publish(topic(Pn.code, 'cmd'), JSON.stringify({ type: 'avatar', pid: Pn.pid, av: v }), { qos: 1 });
+    phonePost({ type: 'avatar', av: v });
     Snd.tick(); return;
   }
   const b = e.target.closest('[data-m]'); if (!b || b.disabled) return;
@@ -4256,9 +4458,16 @@ $('#menu-body').addEventListener('click', e => {
   } else if (m === 'add'){
     const name = cleanName($('#m-add').value);
     if (!name){ toast('Enter a name first.'); return; }
-    if (S.players.some(p => p.name.toLowerCase() === name.toLowerCase())){ toast('Someone already has that name.'); return; }
-    const pid = 'host-' + makeId(16);
-    tagOf(pid).then(tag => { S.players.push(newPlayer(name, pid, tag, -1)); refreshOver(); log(`${name} sat down${S.hand ? ', dealt in next hand' : ''}`); commit({ kind: 'join', tag }, { seq: false }); renderHostMenu(); });
+    if (S.players.some(p => sameName(p.name, name))){ toast('Someone already has that name.'); return; }
+    tagOf('host-' + makeId(16)).then(tag => {
+      if (!S || S.players.some(p => sameName(p.name, name))) return;
+      // a name that left earlier comes back with its chips, so the settle-up keeps one row per person
+      if ((S.gone || []).some(g => sameName(g.name, name))){ if (restoreGone(name, null, tag, -1, 0)) toast(`${name} is back`); else toast(`${S.table.label} is full.`); }
+      else { S.players.push(newPlayer(name, null, tag, -1)); refreshOver(); log(`${name} sat down${S.hand ? ', dealt in next hand' : ''}`); commit({ kind: 'join', tag }, { seq: false }); }
+      renderHostMenu();
+    });
+  } else if (m === 'csv'){
+    downloadCsv(H.code, S); toast('Spreadsheet saved. Check your Downloads or Files app.');
   } else if (m === 'export'){
     exportTable(S); toast('Table file saved. Check your Downloads or Files app.');
   } else if (m === 'move'){
@@ -4365,7 +4574,8 @@ $('#b-ok').addEventListener('click', () => {
 });
 
 /* ================= phone (player) ================= */
-const Pn = { code: null, broker: 0, pid: null, tag: null, name: '', client: null, st: null, lastV: 0, connected: false, hostOn: true, pending: null, lastFx: null, mine: false, last: { v: 0 }, seated: false, tried: 0 };
+/* keys: this phone's signing key for the table. tr: which table key it trusts. lastC: number of its newest request. */
+const Pn = { code: null, broker: 0, keys: null, tr: null, lastC: 0, q: null, retry: 0, joinErr: false, tag: null, name: '', client: null, st: null, lastV: 0, connected: false, hostOn: true, pending: null, lastFx: null, mine: false, last: { v: 0 }, seated: false, tried: 0 };
 const phoneKey = code => 'hgc-phone:' + code;
 let joinAv = (() => { const v = parseInt(store.get('hgc-av'), 10); return avOk(v) ? v : -1; })();
 function avPickHTML(sel, taken){
@@ -4385,7 +4595,7 @@ async function peekTable(code){
   if (code.length !== 6 || typeof mqtt === 'undefined') return;
   Peek.code = code;
   const rec = store.json(phoneKey(code)) || {};
-  const mine = rec.pid ? await tagOf(rec.pid) : null;
+  const mine = rec.pub ? await tagOf(rec.pub) : null;
   if (Peek.code !== code) return;
   const b = QS.get('t') === code && QS.get('b') ? +QS.get('b') : (rec.b || 0);
   let c;
@@ -4395,7 +4605,7 @@ async function peekTable(code){
   c.on('error', () => {});
   c.on('message', (t, buf) => {
     if (Peek.c !== c) return;
-    let m; try { m = JSON.parse(buf.toString()); } catch(e){ return; }
+    let m; try { m = JSON.parse(envText(buf.toString())); } catch(e){ return; }
     if (!m || !m.table || m.table.code !== code || !Array.isArray(m.players)) return;
     const tk = {};
     if (!m.closed) m.players.forEach(q => { if (avOk(q.av) && q.tag !== mine) tk[q.av] = q.name || 'Someone'; });
@@ -4410,15 +4620,23 @@ async function phoneJoin(){
   if (!name){ err.textContent = 'Enter your name.'; return; }
   err.textContent = '';
   const rec = store.json(phoneKey(code)) || {};
-  const pid = rec.pid || makeId(20);
   const b = QS.get('t') === code && QS.get('b') ? +QS.get('b') : (rec.b || 0);
+  const fp = QS.get('t') === code ? (QS.get('k') || '') : '';
   if (avOk(joinAv)) store.set('hgc-av', String(joinAv));
-  store.set(phoneKey(code), JSON.stringify({ pid, name, b }));
-  store.set('hgc-phone-last', code);
-  await phoneStart(code, pid, name, b);
+  await phoneStart(code, name, b, fp);
 }
-async function phoneStart(code, pid, name, b){
-  Object.assign(Pn, { code, pid, name, broker: b || 0, tag: await tagOf(pid), st: null, lastV: 0, pending: null, lastFx: null, mine: false, last: { v: 0 }, seated: false, tried: 0 });
+/* fp: the table key's fingerprint from the QR link. When there is one it decides which table key to trust;
+   otherwise the phone keeps the key it trusted before, or trusts the first one it sees. */
+async function phoneStart(code, name, b, fp){
+  const rec = store.json(phoneKey(code)) || {};
+  let keys = rec.key ? await loadKeys(rec.key) : null;
+  if (!keys){ try { keys = await newKeys(); } catch(e){ toast("This browser can't make a key for the table. Open the page from its https link."); return; } }
+  const hk = !fp && typeof rec.hk === 'string' ? rec.hk : '', c0 = +rec.c || 0;
+  store.set(phoneKey(code), JSON.stringify({ key: keys.jwk, pub: keys.pub, name, b: b || 0, hk, c: c0 }));
+  store.set('hgc-phone-last', code);
+  Object.assign(Pn, { code, name, keys, broker: b || 0, tag: await tagOf(keys.pub), lastC: c0, joinErr: false, waitShown: false,
+    tr: { hk, fp: fp || '', bad: false, save: k => phoneRec(code, { hk: k }) },
+    st: null, lastV: 0, pending: null, lastFx: null, mine: false, last: { v: 0 }, seated: false, tried: 0 });
   show('phone');
   $('#p-name').textContent = name; $('#p-label').textContent = 'Table'; $('#p-code').textContent = code;
   $('#p-status').textContent = 'Connecting to the table…';
@@ -4439,16 +4657,20 @@ function phoneConnect(idx){
     if (Pn.tried + 1 < BROKERS.length){ Pn.tried++; phoneConnect(idx + 1); }
     else $('#p-status').textContent = 'No table found with that code. Check the code on the table device.';
   }, 7000);
+  const join = () => phonePost({ type: 'join', name: Pn.name, av: avOk(joinAv) ? joinAv : -1 });
   c.on('connect', () => {
     if (Pn.client !== c) return;
     Pn.connected = true; netDot('#p-net', 'on'); phoneBanner();
     c.subscribe([topic(code, 'state'), topic(code, 'host'), topic(code, 'to/' + Pn.tag)], { qos: 1 });
     c.publish(topic(code, 'presence/' + Pn.tag), '1', { qos: 1, retain: true });
-    c.publish(topic(code, 'cmd'), JSON.stringify({ type: 'join', pid: Pn.pid, name: Pn.name, av: avOk(joinAv) ? joinAv : -1 }), { qos: 1 });
+    join();
   });
+  // Until the first seat: ask again now and then, in case the table restarted while the host was deciding.
+  clearInterval(Pn.retry);
+  Pn.retry = setInterval(() => { if (Pn.client === c && Pn.connected && !Pn.seated && !Pn.joinErr && !(Pn.st && Pn.st.closed)) join(); }, 15000);
   const down = () => { if (Pn.client !== c) return; Pn.connected = false; netDot('#p-net', 'off'); phoneBanner(); phoneRender(); };
   c.on('close', down); c.on('offline', down); c.on('error', () => {});
-  c.on('message', (t, buf) => {
+  c.on('message', (t, buf, pk) => {
     if (Pn.client !== c) return;
     const s = buf.toString();
     if (t.endsWith('/host')){
@@ -4457,10 +4679,36 @@ function phoneConnect(idx){
       if (Pn.hostOn && !was && Pn.pending && Pn.pendingMsg) c.publish(topic(Pn.code, 'cmd'), Pn.pendingMsg, { qos: 1 });
       return;
     }
-    let m; try { m = JSON.parse(s); } catch(e){ return; }
-    if (t.endsWith('/state')){ clearTimeout(probe); phoneState(m); }
-    else phoneMsg(m);
+    // Only messages signed by the table count; anything else on the code is ignored.
+    fromTable(s, Pn.tr).then(m => {
+      if (Pn.client !== c) return;
+      if (!m){ if (!Pn.st && Pn.tr.bad) $('#p-status').textContent = 'Something other than this table is answering on this code. Scan the QR code on the table device.'; return; }
+      if (t.endsWith('/state')){
+        clearTimeout(probe);
+        if (!(pk && pk.retain)) Pn.hostOn = true;          // a fresh state means the table is online, whatever the online flag said
+        phoneState(m);
+      } else if (m.to === Pn.tag) phoneMsg(m);
+    });
   });
+}
+/* Update this phone's saved record for a table (only while it still has one). */
+function phoneRec(code, patch){ const r = store.json(phoneKey(code)); if (r){ Object.assign(r, patch); store.set(phoneKey(code), JSON.stringify(r)); } }
+/* Sign a request. c only goes up (the clock, or one more than last time), so the table can tell a resend or a replay from a new tap. */
+async function phoneCmd(obj){
+  if (!Pn.keys) return null;
+  const c = Pn.lastC = Math.max(Date.now(), (Pn.lastC || 0) + 1);
+  phoneRec(Pn.code, { c });
+  try { return await seal(Pn.keys, JSON.stringify({ ...obj, code: Pn.code, c })); } catch(e){ return null; }
+}
+/* Requests go out one after another in the order they were numbered. Resolves to the signed message. */
+function phonePost(obj){
+  const c = Pn.client, code = Pn.code;
+  Pn.q = (Pn.q || Promise.resolve()).then(async () => {
+    const msg = await phoneCmd(obj);
+    if (msg && c && c === Pn.client) c.publish(topic(code, 'cmd'), msg, { qos: 1 });
+    return msg;
+  }).catch(() => null);
+  return Pn.q;
 }
 function phoneBanner(){
   if (!Pn.connected) banner('Reconnecting to the table…');
@@ -4469,10 +4717,12 @@ function phoneBanner(){
 }
 function phoneMsg(m){
   if (!m || typeof m !== 'object') return;
-  if (m.type === 'error'){ Pn.pending = null; toast(m.msg || 'Something went wrong.'); phoneRender(); if (!Pn.seated) $('#p-status').textContent = m.msg; }
+  if (m.type === 'error'){ Pn.pending = null; toast(m.msg || 'Something went wrong.'); phoneRender(); if (!Pn.seated){ Pn.joinErr = true; $('#p-status').textContent = m.msg; } }
   else if (m.type === 'info') toast(m.msg);
+  else if (m.type === 'wait'){ if (!Pn.seated){ $('#p-status').textContent = 'Waiting for the table device to let you in…'; if (!Pn.waitShown){ Pn.waitShown = true; toast(m.msg); } } }
   else if (m.type === 'joined'){ Pn.seated = true; if (m.name && m.name !== Pn.name){ Pn.name = m.name; $('#p-name').textContent = m.name; } }
-  else if (m.type === 'left'){ toast('You left the table.'); phoneQuit(); }
+  // only leave once the table's own state agrees, so an old "left" message can't push you out
+  else if (m.type === 'left'){ if (phoneSeat() < 0){ toast('You left the table.'); phoneQuit(); } }
 }
 function phoneState(m){
   if (!m || !m.table || m.table.code !== Pn.code) return;
@@ -4482,8 +4732,8 @@ function phoneState(m){
   const me = phoneSeat();
   if (me >= 0){
     Pn.seated = true;
-    if (QS.get('t')) try { const u = new URL(location.href); u.searchParams.delete('t'); u.searchParams.delete('b'); history.replaceState(null, '', u.toString()); } catch(e){}
-    if (!store.get(phoneKey(Pn.code))){ store.set(phoneKey(Pn.code), JSON.stringify({ pid: Pn.pid, name: Pn.name, b: Pn.broker })); store.set('hgc-phone-last', Pn.code); }
+    if (QS.get('t')) try { const u = new URL(location.href); ['t', 'b', 'k'].forEach(x => u.searchParams.delete(x)); history.replaceState(null, '', u.toString()); } catch(e){}
+    if (!store.get(phoneKey(Pn.code))){ store.set(phoneKey(Pn.code), JSON.stringify({ key: Pn.keys.jwk, pub: Pn.keys.pub, name: Pn.name, b: Pn.broker, hk: Pn.tr.hk, c: Pn.lastC })); store.set('hgc-phone-last', Pn.code); }
   } else if (Pn.seated && prev && prev.players.some(p => p.tag === Pn.tag)){
     forgetSeat(); toast("You've left the table.");
   }
@@ -4592,38 +4842,39 @@ $('#p-dock').addEventListener('click', e => {
   if (kind === 'raise') return openRaise(st, me, (k, to) => phoneSend(k, to));
   phoneSend(kind);
 });
-function phoneSend(kind, to){
+async function phoneSend(kind, to){
   const st = Pn.st, me = phoneSeat();
-  if (!st || !Pn.connected || st.toAct !== me) return;
-  Pn.pending = { seq: st.seq, kind };
+  if (!st || !Pn.client || !Pn.connected || st.toAct !== me) return;
+  const sent = Pn.pending = { seq: st.seq, kind };
+  Pn.pendingMsg = null;
   const p = st.players[me], max = maxTo(st, me);
   const shown = (kind === 'call' && p.stack <= st.currentBet - p.bet) || (kind === 'raise' && to >= max) || kind === 'allin' ? 'allin'
     : kind === 'raise' ? (st.currentBet === 0 ? 'bet' : 'raise') : kind;
   Pn.ownPlayed = true;
   if (shown === 'allin'){ Snd.allIn(); allInFx(p.name, $('#p-me')); } else playOwn(shown);
-  Pn.pendingMsg = JSON.stringify({ type: 'act', pid: Pn.pid, kind, to, seq: st.seq, rid: makeId(10) });
-  Pn.client.publish(topic(Pn.code, 'cmd'), Pn.pendingMsg, { qos: 1 });
   phoneRender();
-  const sent = Pn.pending;
   setTimeout(() => { if (Pn.pending === sent){ Pn.pending = null; phoneRender(); toast('No answer from the table. Check the table device and try again.'); } }, 12000);
+  const msg = await phonePost({ type: 'act', kind, to, seq: st.seq });
+  if (Pn.pending === sent) Pn.pendingMsg = msg;        // kept to resend if the table drops before answering
 }
 function phoneTopUp(amt){
   if (!Pn.client || !Pn.connected) return toast('Not connected to the table.');
-  Pn.client.publish(topic(Pn.code, 'cmd'), JSON.stringify({ type: 'topup', pid: Pn.pid, amt }), { qos: 1 });
+  phonePost({ type: 'topup', amt });
   closeSheets();
 }
 function phoneLeave(b){
   const me = phoneSeat();
   if (me < 0){ closeSheets(); phoneQuit(); return; }
   if (!b.classList.contains('armed')){ b.classList.add('armed'); b.textContent = 'Tap again to leave'; return; }
-  if (Pn.client && Pn.connected) Pn.client.publish(topic(Pn.code, 'cmd'), JSON.stringify({ type: 'leave', pid: Pn.pid }), { qos: 1 });
+  if (Pn.client && Pn.connected) phonePost({ type: 'leave' });
   closeSheets();
 }
 function forgetSeat(){
   store.del(phoneKey(Pn.code)); store.del('hgc-phone-last');
-  try { const u = new URL(location.href); u.searchParams.delete('t'); u.searchParams.delete('b'); history.replaceState(null, '', u.toString()); } catch(e){}
+  try { const u = new URL(location.href); ['t', 'b', 'k'].forEach(x => u.searchParams.delete(x)); history.replaceState(null, '', u.toString()); } catch(e){}
 }
 function phoneQuit(){
+  clearInterval(Pn.retry); Pn.retry = 0;
   if (Pn.client){ try { Pn.client.publish(topic(Pn.code, 'presence/' + Pn.tag), '0', { qos: 1, retain: true }); Pn.client.end(); } catch(e){} Pn.client = null; }
   forgetSeat();
   banner(''); goHome();
@@ -4637,7 +4888,7 @@ $('#p-leave').addEventListener('click', e => {
     setTimeout(() => { b.classList.remove('armed'); b.textContent = 'Leave'; }, 3500); return;
   }
   b.classList.remove('armed'); b.textContent = 'Leave';
-  if (Pn.client && Pn.connected) Pn.client.publish(topic(Pn.code, 'cmd'), JSON.stringify({ type: 'leave', pid: Pn.pid }), { qos: 1 });
+  if (Pn.client && Pn.connected) phonePost({ type: 'leave' });
 });
 $('#p-menu').addEventListener('click', () => {
   const st = Pn.st, me = phoneSeat(), p = st && me >= 0 ? st.players[me] : null;
@@ -4657,12 +4908,15 @@ $('#p-menu').addEventListener('click', () => {
 /* ================= viewer (watch a table) ================= */
 /* Each watching screen keeps a retained "watch/<id>" flag on the relay; it is cleared when the screen stops
    watching, and by the relay itself (the will message) if the screen drops off, so the table can count viewers. */
-const Wt = { client: null, lastFx: null, lastV: 0, hostOn: true, connected: false, tried: 0, wid: '' };
-function watchStart(code, b){
+const Wt = { client: null, lastFx: null, lastV: 0, hostOn: true, connected: false, tried: 0, wid: '', tr: null };
+/* fp: the table key's fingerprint from a watch link, which decides which table key to trust (as on phones). */
+function watchStart(code, b, fp){
   VIEW = true; S = null;
-  Object.assign(H, { code, broker: b || 0, hist: [], online: {}, viewers: {}, last: { v: 0 }, client: null });
-  Object.assign(Wt, { lastFx: null, lastV: 0, hostOn: true, tried: 0, wid: makeId(10) });
-  store.set('hgc-watch-last', JSON.stringify({ code, b: b || 0 }));
+  const saved = store.json('hgc-watch-last'), hk = !fp && saved && saved.code === code && typeof saved.hk === 'string' ? saved.hk : '';
+  Object.assign(H, { code, broker: b || 0, hist: [], online: {}, viewers: {}, last: { v: 0 }, client: null, keys: null, fp: '', claims: [], own: [], saveFail: false });
+  Object.assign(Wt, { lastFx: null, lastV: 0, hostOn: true, tried: 0, wid: makeId(10),
+    tr: { hk, fp: fp || '', bad: false, save: k => { const r = store.json('hgc-watch-last'); if (r && r.code === code){ r.hk = k; store.set('hgc-watch-last', JSON.stringify(r)); } } } });
+  store.set('hgc-watch-last', JSON.stringify({ code, b: b || 0, hk }));
   show('host');
   $('#h-label').textContent = 'Table'; $('#h-code').textContent = code; setHTML($('#h-meta'), '');
   $('#h-undo').hidden = true; $('#h-menu').hidden = true; $('#h-leave').hidden = false; $('#h-viewtag').hidden = false;
@@ -4692,18 +4946,21 @@ function watchConnect(idx){
   });
   const down = () => { if (Wt.client !== c) return; Wt.connected = false; netDot('#h-net', 'off'); watchBanner(); };
   c.on('close', down); c.on('offline', down); c.on('error', () => {});
-  c.on('message', (t, buf) => {
+  c.on('message', (t, buf, pk) => {
     if (Wt.client !== c) return;
     const str = buf.toString();
     if (t.endsWith('/host')){ Wt.hostOn = str !== '0'; watchBanner(); return; }
-    let m; try { m = JSON.parse(str); } catch(e){ return; }
-    if (!m || !m.table || m.table.code !== H.code) return;
-    if (S && m.v <= Wt.lastV && m.seq <= S.seq) return;
-    clearTimeout(probe);
-    S = m; Wt.lastV = m.v;
-    hostRender();
-    if (m.fx && m.fx.n !== Wt.lastFx){ const first = Wt.lastFx === null; Wt.lastFx = m.fx.n; if (!first) hostFx(m.fx, {}); }
-    watchBanner();
+    fromTable(str, Wt.tr).then(m => {
+      if (Wt.client !== c || !VIEW) return;
+      if (!m || !m.table || m.table.code !== H.code) return;
+      if (S && m.v <= Wt.lastV && m.seq <= S.seq) return;
+      clearTimeout(probe);
+      if (!(pk && pk.retain)) Wt.hostOn = true;
+      S = m; Wt.lastV = m.v;
+      hostRender();
+      if (m.fx && m.fx.n !== Wt.lastFx){ const first = Wt.lastFx === null; Wt.lastFx = m.fx.n; if (!first) hostFx(m.fx, {}); }
+      watchBanner();
+    });
   });
 }
 function watchBanner(){
@@ -4717,7 +4974,7 @@ function watchStop(){
   if (Wt.client){ try { Wt.client.publish(topic(H.code, 'watch/' + Wt.wid), '', { qos: 1, retain: true }); Wt.client.end(); } catch(e){} Wt.client = null; }
   VIEW = false; S = null; banner('');
   store.del('hgc-watch-last');
-  try { const u = new URL(location.href); u.searchParams.delete('w'); history.replaceState(null, '', u.toString()); } catch(e){}
+  try { const u = new URL(location.href); ['w', 'b', 'k'].forEach(x => u.searchParams.delete(x)); history.replaceState(null, '', u.toString()); } catch(e){}
   goHome();
 }
 $('#go-watch').addEventListener('click', () => { $('#w-code').value = ''; $('#w-err').textContent = ''; show('watchform'); });
@@ -4726,13 +4983,13 @@ $('#w-code').addEventListener('keydown', e => { if (e.key === 'Enter') $('#w-go'
 $('#w-go').addEventListener('click', () => {
   const code = $('#w-code').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (code.length !== 6){ $('#w-err').textContent = 'The table code has 6 characters.'; return; }
-  $('#w-err').textContent = ''; Snd.init(); watchStart(code, 0);
+  $('#w-err').textContent = ''; Snd.init(); watchStart(code, 0, '');
 });
 
 /* ================= move a table: export to a file, import as a new table ================= */
 function tableFile(st){
   const t = JSON.parse(JSON.stringify(st));
-  t.players.forEach(p => { delete p.pid; delete p.tag; delete p.rid; });
+  t.players.forEach(p => { delete p.pid; delete p.tag; delete p.rid; delete p.key; delete p.ctr; });
   return { app: 'home-game-chips', version: 1, exportedAt: Date.now(), table: t };
 }
 function saveFile(name, text, type){
@@ -4749,12 +5006,13 @@ async function importTable(src){
   const n = x => { const v = Math.floor(Number(x)); return Number.isFinite(v) && v >= 0 ? v : 0; };
   if (!src || !Array.isArray(src.players) || !(n(src.startStack) > 0) || !(n(src.bb) > 0) || !(n(src.sb) > 0)) throw new Error('That file is not a Home Game Chips table.');
   if (src.stage === 'betting' || src.stage === 'showdown') throw new Error('That table was saved in the middle of a hand. Finish the hand and export again.');
-  const players = [];
+  let keys; try { keys = await newKeys(); } catch(e){ throw new Error("This browser couldn't make the table's security key. Open the page from its https link."); }
+  const fp = await keyFp(keys.pub), players = [];
   for (const p of src.players){
     const name = cleanName(p.name);
     if (!name || players.some(q => q.name.toLowerCase() === name.toLowerCase()) || players.length >= 10) continue;
-    const pid = 'moved-' + makeId(16);
-    players.push({ name, pid, av: Number.isInteger(p.av) ? p.av : -1, tag: await tagOf(pid), stack: n(p.stack) + n(p.committed), bought: n(p.bought), bet: 0, committed: 0, folded: true, allIn: false, acted: false, locked: false, out: false, last: 'Rejoin with the same name', topup: false, leaving: false, ...oweOf(p) });
+    // no phone yet: each player claims their seat by joining with the same name, and the host lets them in
+    players.push({ name, key: null, ctr: 0, av: Number.isInteger(p.av) ? p.av : -1, tag: await tagOf('moved-' + makeId(16)), stack: n(p.stack) + n(p.committed), bought: n(p.bought), bet: 0, committed: 0, folded: true, allIn: false, acted: false, locked: false, out: false, last: 'Rejoin with the same name', topup: false, leaving: false, ...oweOf(p) });
   }
   if (!players.length) throw new Error('That file has no players in it.');
   const count = (toInt(store.get('hgc-table-count'), 0) || 0) + 1;
@@ -4768,13 +5026,13 @@ async function importTable(src){
         street: 0, currentBet: 0, minRaise: bb, toAct: -1, hand: n(src.hand), stage: 'lobby', result: '', resultSub: '',
         pots: null, runout: false, seq: 0, fx: null, log: [], closed: false, bounty: n(src.bounty), lastDealt: [], lastWin: [], bountyHand: 0, money: moneyOf(src),
         hands: Array.isArray(src.hands) ? src.hands.slice(-1000) : [] };
-  ensureAvatars(S);
+  upgradeTable(S); ensureAvatars(S);
   log(`Moved here from ${from}`);
-  Object.assign(H, { code, pubN: 0, fxN: 0, hist: [], online: {}, broker: 0, last: { v: 0 } });
+  Object.assign(H, { code, pubN: 0, fxN: 0, hist: [], online: {}, broker: 0, last: { v: 0 }, keys, fp, claims: [], own: [], saveFail: false });
   AD.paused = true;
   hostSave();
   hostStart(0);
-  toast(`${S.table.label} is open. Players rejoin with the same name to get their chips.`);
+  toast(`${S.table.label} is open. Players rejoin with the same name, and you let each one in.`);
 }
 $('#c-import').addEventListener('click', () => $('#c-file').click());
 $('#c-file').addEventListener('change', async e => {
@@ -4838,6 +5096,92 @@ function settlePlan(st){
   }
   return { rows: sm.rows, pays, m: moneyOf(st) };
 }
+/* ---- player stats, replayed from each hand's action log (hands played since tracking began, up to the last 1,000) ---- */
+const ACT_NAME = { f: 'Fold', x: 'Check', c: 'Call', b: 'Bet', r: 'Raise', sb: 'Small blind', bb: 'Big blind' };
+/* Seat name from its place after the button, k = 0 is the button. Under 4 players the one blind sits left of the button. */
+function posName(k, n){
+  if (k === 0) return 'BTN';
+  if (n < 4) return k === 1 ? 'BB' : 'UTG';
+  if (k === 1) return 'SB';
+  if (k === 2) return 'BB';
+  if (n > 4 && k === n - 1) return 'CO';
+  return k === 3 ? 'UTG' : 'UTG+' + (k - 3);
+}
+function playerStats(st){
+  const out = new Map(), ACTS5 = ['f', 'x', 'c', 'b', 'r'];
+  const get = name => {
+    let r = out.get(name);
+    if (!r){ r = { name, hands: 0, vpip: 0, pfr: 0, tb: 0, tbO: 0, cb: 0, cbO: 0, ftb: 0, ftbO: 0, agg: 0, pcall: 0, saw: 0, sd: 0, sdw: 0, won: 0, ai: 0,
+                   n: { f: 0, x: 0, c: 0, b: 0, r: 0 }, by: [0, 1, 2, 3].map(() => ({ f: 0, x: 0, c: 0, b: 0, r: 0 })) }; out.set(name, r); }
+    return r;
+  };
+  let logged = 0;
+  (st.hands || []).forEach(h => {
+    if (!Array.isArray(h.p) || !Array.isArray(h.a)) return;          // hands from before tracking
+    logged++;
+    const rows = h.p.map(get), pre = h.p.map(() => ({ vp: false, pr: false, tbO: false, fold: false }));
+    const winners = new Set((h.win || []).map(w => w[0])), sd = new Set(h.sd || []);
+    const reached = !!h.sd || h.a.some(e => e[0] >= 1);              // the hand got to the flop
+    let raises = 0, aggr = -1, flopBet = false, cbDone = false, street = -1, lvl = 0, put = {};
+    h.a.forEach(([s, i, k, add, to, ai]) => {
+      const r = rows[i], f = pre[i]; if (!r) return;
+      if (s !== street){ street = s; lvl = 0; put = {}; }
+      const facing = lvl > (put[i] || 0);
+      if (k === 'sb' || k === 'bb'){ put[i] = to; lvl = Math.max(lvl, to); return; }
+      if (!ACTS5.includes(k)) return;
+      r.n[k]++; if (r.by[s]) r.by[s][k]++; if (ai) r.ai++;
+      if (s === 0){
+        if (k === 'c' || k === 'b' || k === 'r') f.vp = true;
+        if (k === 'f') f.fold = true;
+        // 3-bet chance: acting after exactly one raise that someone else made
+        if (raises === 1 && aggr !== i && !f.tbO){ f.tbO = true; r.tbO++; if (k === 'r') r.tb++; }
+        if (k === 'b' || k === 'r'){ raises++; aggr = i; f.pr = true; }
+      } else {
+        if (k === 'b' || k === 'r') r.agg++; else if (k === 'c') r.pcall++;
+        if (facing){ r.ftbO++; if (k === 'f') r.ftb++; }
+        // continuation bet chance: the last pre-flop raiser acts on the flop before anyone has bet
+        if (s === 1 && i === aggr && !flopBet && !cbDone){ cbDone = true; r.cbO++; if (k === 'b') r.cb++; }
+        if (s === 1 && k === 'b') flopBet = true;
+      }
+      if (k === 'c' || k === 'b' || k === 'r'){ put[i] = to; lvl = Math.max(lvl, to); }
+    });
+    rows.forEach((r, i) => {
+      const f = pre[i], nm = h.p[i];
+      r.hands++;
+      if (f.vp) r.vpip++;
+      if (f.pr) r.pfr++;
+      if (reached && !f.fold){ r.saw++; if (sd.has(nm)){ r.sd++; if (winners.has(nm)) r.sdw++; } }
+      if (winners.has(nm)) r.won++;
+    });
+  });
+  return { logged, rows: [...out.values()].sort((a, b) => b.hands - a.hands || a.name.localeCompare(b.name)) };
+}
+const pctOf = (a, b) => b ? Math.round(100 * a / b) + '%' : '–';
+const afOf = r => r.pcall ? (r.agg / r.pcall).toFixed(1) : r.agg ? '∞' : '–';
+function statsHTML(st){
+  const ps = playerStats(st);
+  if (!ps.logged) return '<p class="hint" style="margin:0">No hands tracked yet. Stats build up as hands are played to the end.</p>';
+  const th = (t, tip) => `<th class="num" title="${tip}">${t}</th>`;
+  const tend = ps.rows.map(r => `<tr><td class="nm">${esc(r.name)}</td><td class="num">${fmt(r.hands)}</td><td class="num">${pctOf(r.vpip, r.hands)}</td><td class="num">${pctOf(r.pfr, r.hands)}</td>
+    <td class="num">${pctOf(r.tb, r.tbO)}</td><td class="num">${pctOf(r.cb, r.cbO)}</td><td class="num">${afOf(r)}</td><td class="num">${pctOf(r.ftb, r.ftbO)}</td>
+    <td class="num">${pctOf(r.sd, r.saw)}</td><td class="num">${pctOf(r.sdw, r.sd)}</td><td class="num">${pctOf(r.won, r.hands)}</td></tr>`).join('');
+  const freq = ps.rows.map(r => { const tot = r.n.f + r.n.x + r.n.c + r.n.b + r.n.r, cell = v => `<td class="num">${pctOf(v, tot)}<small>${v}</small></td>`;
+    return `<tr><td class="nm">${esc(r.name)}</td><td class="num">${fmt(tot)}</td>${cell(r.n.f)}${cell(r.n.x)}${cell(r.n.c)}${cell(r.n.b)}${cell(r.n.r)}${cell(r.ai)}</tr>`; }).join('');
+  return `<p class="hint" style="margin:0 0 10px">From ${fmt(ps.logged)} tracked hand${ps.logged === 1 ? '' : 's'}. Small samples swing a lot, so give it a few dozen hands before reading much into them.</p>
+    <div class="tbl-wrap"><table class="settle stats"><thead><tr><th>Tendencies</th>${th('Hands', 'Hands dealt in')}${th('VPIP', 'Put money in voluntarily before the flop')}${th('PFR', 'Raised before the flop')}${th('3-bet', 'Re-raised a single pre-flop raise')}${th('C-bet', 'Bet the flop after raising pre-flop')}${th('AF', 'Aggression after the flop: (bets + raises) ÷ calls')}${th('Fold to bet', 'Folded when facing a bet after the flop')}${th('WTSD', 'Went to showdown after seeing the flop')}${th('W$SD', 'Won money at showdown')}${th('Won', 'Hands won')}</tr></thead><tbody>${tend}</tbody></table></div>
+    <div class="tbl-wrap" style="margin-top:12px"><table class="settle stats"><thead><tr><th>How often they…</th>${th('Actions', 'Decisions made (blinds not counted)')}${th('Fold', '')}${th('Check', '')}${th('Call', '')}${th('Bet', '')}${th('Raise', '')}${th('All in', 'Share of actions that put them all in')}</tr></thead><tbody>${freq}</tbody></table></div>
+    <details class="legend"><summary>What these mean</summary><dl>
+      <dt>VPIP</dt><dd>How often they put chips in before the flop by choice (calling or raising, not posting a blind). Loose players are high, tight players low.</dd>
+      <dt>PFR</dt><dd>How often they raise before the flop. Close to VPIP means they mostly raise when they play; far below means they mostly call.</dd>
+      <dt>3-bet</dt><dd>When someone raised before the flop, how often they re-raised.</dd>
+      <dt>C-bet</dt><dd>After raising before the flop, how often they bet the flop when nobody bet first.</dd>
+      <dt>AF</dt><dd>Aggression after the flop: bets and raises divided by calls. Above 2 is aggressive, below 1 is passive.</dd>
+      <dt>Fold to bet</dt><dd>After the flop, how often they fold when facing a bet.</dd>
+      <dt>WTSD</dt><dd>Of the hands where they saw the flop, how often they went all the way to a showdown.</dd>
+      <dt>W$SD</dt><dd>Of their showdowns, how often they won chips.</dd>
+      <dt>How often they…</dt><dd>Each action as a share of all their decisions, with the count beside it. The spreadsheet splits these by street and lists every action.</dd>
+    </dl></details>`;
+}
 function avByName(st, name, size = 28){ const p = st.players.find(q => q.name === name); return p && avOk(p.av) ? avDisc(p.av, size) : ''; }
 function paysHTML(st, plan, me = null, size = 28){
   if (!plan.pays.length) return '<div class="pay even">Everyone finished even. Nobody owes anything.</div>';
@@ -4870,6 +5214,7 @@ function renderHistDetail(code){
   $('#hd-table').innerHTML = `<thead><tr><th>Player</th><th class="num">Bought</th><th class="num">Chips</th><th class="num">Net</th><th class="num">${esc(plan.m.cur)}</th><th class="num">Hands won</th></tr></thead><tbody>` +
     sm.rows.map(x => { const c = x.net > 0 ? 'pos' : x.net < 0 ? 'neg' : '', sg = x.net > 0 ? '+' : x.net < 0 ? '−' : '';
       return `<tr class="${x.left ? 'gone' : ''}"><td class="nm">${esc(x.name)}${x.left ? ' (left)' : ''}</td><td class="num">${fmt(x.bought)}</td><td class="num">${fmt(x.chips)}</td><td class="num ${c}">${sg}${fmt(Math.abs(x.net))}</td><td class="num ${c}">${sg}${moneyText(x.net, plan.m).replace(/^\S+ /, '')}</td><td class="num">${x.won}</td></tr>`; }).join('') + '</tbody>';
+  $('#hd-pstats').innerHTML = statsHTML(st);
   const hs = (st.hands || []).slice(-15).reverse();
   $('#hd-hands').innerHTML = hs.length ? `<thead><tr><th>Hand</th><th>Winner</th><th class="num">Pot</th></tr></thead><tbody>` +
     hs.map(h => `<tr><td>${h.n}</td><td class="nm">${esc(h.win.map(w => w[0]).join(' & '))}</td><td class="num">${fmt(h.pot)}</td></tr>`).join('') + '</tbody>' : '<tbody><tr><td>No hands finished yet.</td></tr></tbody>';
@@ -4881,14 +5226,31 @@ function renderHistDetail(code){
   show('histdetail');
 }
 function csvCell(v){ const t = String(v); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }
-function downloadCsv(code){
-  const r = store.json(hostKey(code)); if (!r) return;
+/* live: the open table, so the download doesn't depend on the last save having worked */
+function downloadCsv(code, live){
+  const r = live ? { S: live } : store.json(hostKey(code)); if (!r || !r.S) return;
   const st = r.S, sm = tableSummary(st);
   const lines = [['Table', st.table.label], ['Code', code], ['Started', fmtDate(st.table.created)], ['Starting stack', st.startStack], ['Blinds', `${st.sb}/${st.bb}`], [],
     ['Chip value', rateText(moneyOf(st))], [],
     ['Player', 'Bought', 'Chips', 'Net', `Net (${moneyOf(st).cur})`, 'Hands won'], ...sm.rows.map(x => [x.name + (x.left ? ' (left)' : ''), x.bought, x.chips, x.net, +toMoney(x.net, moneyOf(st)).toFixed(2), x.won]), [],
     ['Who pays', 'Pays who', `Amount (${moneyOf(st).cur})`, 'Chips'], ...settlePlan(st).pays.map(x => [x.from, x.to, +toMoney(x.chips, moneyOf(st)).toFixed(2), x.chips]), [],
     ['Hand', 'Pot', 'Winners'], ...(st.hands || []).map(h => [h.n, h.pot, h.win.map(w => `${w[0]} ${w[1]}`).join('; ')])];
+  // betting behaviour: tendencies, actions by street, and every action of every tracked hand (for pivot tables)
+  const ps = playerStats(st);
+  if (ps.logged){
+    const pc = (a, b) => b ? Math.round(1000 * a / b) / 10 : '';
+    lines.push([], ['Player stats', `${ps.logged} tracked hands`],
+      ['Player', 'Hands', 'VPIP %', 'PFR %', '3-bet %', '3-bet chances', 'C-bet %', 'C-bet chances', 'AF', 'Fold to bet %', 'Faced a bet', 'Saw flop', 'WTSD %', 'W$SD %', 'Won %', 'Hands won', 'Folds', 'Checks', 'Calls', 'Bets', 'Raises', 'All-ins'],
+      ...ps.rows.map(r => [r.name, r.hands, pc(r.vpip, r.hands), pc(r.pfr, r.hands), pc(r.tb, r.tbO), r.tbO, pc(r.cb, r.cbO), r.cbO, r.pcall ? +(r.agg / r.pcall).toFixed(2) : '', pc(r.ftb, r.ftbO), r.ftbO,
+        r.saw, pc(r.sd, r.saw), pc(r.sdw, r.sd), pc(r.won, r.hands), r.won, r.n.f, r.n.x, r.n.c, r.n.b, r.n.r, r.ai]),
+      [], ['Actions by street'], ['Player', 'Street', 'Folds', 'Checks', 'Calls', 'Bets', 'Raises'],
+      ...ps.rows.flatMap(r => r.by.map((b, s) => [r.name, STREETS[s], b.f, b.x, b.c, b.b, b.r])),
+      [], ['Action log'], ['Hand', 'Street', 'Player', 'Position', 'Action', 'Chips put in', 'Bet this street', 'All in', 'Players dealt']);
+    (st.hands || []).forEach(h => {
+      if (!Array.isArray(h.p) || !Array.isArray(h.a)) return;
+      h.a.forEach(([s, i, k, add, to, ai]) => lines.push([h.n, STREETS[s] || s, h.p[i], posName(i, h.p.length), k === 'bb' && h.p.length < 4 ? 'Blind' : (ACT_NAME[k] || k), add, to, ai ? 'Yes' : '', h.p.length]));
+    });
+  }
   const blob = new Blob([lines.map(l => l.map(csvCell).join(',')).join('\n')], { type: 'text/csv' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = `${st.table.label.replace(/\s+/g, '-')}-${code}.csv`; document.body.appendChild(a); a.click();
@@ -4903,7 +5265,7 @@ $('#hd-actions').addEventListener('click', e => {
   if (a === 'csv') downloadCsv(histCode);
   else if (a === 'export'){ const r = store.json(hostKey(histCode)); if (r) exportTable(r.S); }
   else if (a === 'continue'){ const r = store.json(hostKey(histCode)); if (r) importTable(r.S).catch(err => toast(err.message)); }
-  else if (a === 'resume'){ Snd.init(); if (!hostResume(histCode)) toast('That table could not be opened.'); }
+  else if (a === 'resume'){ Snd.init(); hostResume(histCode).then(ok => { if (!ok) toast('That table could not be opened.'); }); }
   else if (a === 'delete'){
     if (!b.classList.contains('armed')){ b.classList.add('armed'); b.textContent = 'Tap again to delete for good'; return; }
     store.del(hostKey(histCode)); if (store.get('hgc-host-last') === histCode) store.del('hgc-host-last');
@@ -4948,7 +5310,7 @@ function goHome(){
   const hc = store.get('hgc-host-last'), hr = hc && store.json(hostKey(hc));
   if (hr && hr.S && !hr.S.closed) list.push(`<div class="resume"><div><b>Resume ${esc(hr.S.table.label)}</b><span>Table device · Code ${esc(hc)} · ${hr.S.players.length} players</span></div><button class="btn b-raise" data-resume-host="${esc(hc)}">Resume</button></div>`);
   const pc = store.get('hgc-phone-last'), pr = pc && store.json(phoneKey(pc));
-  if (pr && pr.pid) list.push(`<div class="resume"><div><b>Rejoin as ${esc(pr.name)}</b><span>Code ${esc(pc)}</span></div><button class="btn b-raise" data-resume-phone="${esc(pc)}">Rejoin</button></div>`);
+  if (pr && (pr.key || pr.pid)) list.push(`<div class="resume"><div><b>Rejoin as ${esc(pr.name)}</b><span>Code ${esc(pc)}</span></div><button class="btn b-raise" data-resume-phone="${esc(pc)}">Rejoin</button></div>`);
   const wr = store.json('hgc-watch-last');
   if (wr && wr.code) list.push(`<div class="resume"><div><b>Keep watching</b><span>Code ${esc(wr.code)}</span></div><button class="btn b-raise" data-resume-watch="${esc(wr.code)}">Watch</button></div>`);
   $('#home-resume').innerHTML = list.join('');
@@ -4959,10 +5321,10 @@ function goHome(){
 }
 $('#home-resume').addEventListener('click', e => {
   const h = e.target.closest('[data-resume-host]'), p = e.target.closest('[data-resume-phone]');
-  if (h){ Snd.init(); if (!hostResume(h.dataset.resumeHost)) toast('That table could not be found on this device.'); }
-  if (p){ Snd.init(); const c = p.dataset.resumePhone, r = store.json(phoneKey(c)); if (r) phoneStart(c, r.pid, r.name, r.b); }
+  if (h){ Snd.init(); hostResume(h.dataset.resumeHost).then(ok => { if (!ok) toast('That table could not be found on this device.'); }); }
+  if (p){ Snd.init(); const c = p.dataset.resumePhone, r = store.json(phoneKey(c)); if (r) phoneStart(c, r.name, r.b, ''); }
   const w = e.target.closest('[data-resume-watch]');
-  if (w){ Snd.init(); const r = store.json('hgc-watch-last'); watchStart(w.dataset.resumeWatch, r ? r.b : 0); }
+  if (w){ Snd.init(); const r = store.json('hgc-watch-last'); watchStart(w.dataset.resumeWatch, r ? r.b : 0, ''); }
 });
 $('#go-create').addEventListener('click', () => {
   const count = (toInt(store.get('hgc-table-count'), 0) || 0) + 1;
@@ -4991,17 +5353,19 @@ $('#j-code').addEventListener('input', e => { e.target.value = e.target.value.to
 (function boot(){
   $('#j-code').value = ''; $('#w-code').value = '';      // browsers like to restore old form values on reload
   if (typeof mqtt === 'undefined'){ document.body.innerHTML = '<p style="padding:24px">The connection library failed to load. Reload the page.</p>'; return; }
+  // signing needs a secure page: the https link (or localhost while testing)
+  if (!CRYPTO_OK){ document.body.innerHTML = '<p style="padding:24px">This page has to be opened from its secure https link (for example the GitHub Pages address). It can\'t keep the table safe from here.</p>'; return; }
   const w = (QS.get('w') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
-  if (w.length === 6){ watchStart(w, QS.get('b') ? +QS.get('b') : 0); return; }
+  if (w.length === 6){ watchStart(w, QS.get('b') ? +QS.get('b') : 0, QS.get('k') || ''); return; }
   const t = (QS.get('t') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
   if (t.length === 6){
     const rec = store.json(phoneKey(t));
-    if (rec && rec.pid){ phoneStart(t, rec.pid, rec.name, QS.get('b') ? +QS.get('b') : rec.b); return; }
+    if (rec && (rec.key || rec.pid) && rec.name){ phoneStart(t, rec.name, QS.get('b') ? +QS.get('b') : rec.b, QS.get('k') || ''); return; }
     renderJoinPicker(); show('join'); $('#j-code').value = t; peekTable(t); $('#j-name').focus(); return;
   }
   goHome();
 })();
-window.__hgc = { get S(){ return S; }, get phone(){ return Pn.st; }, H, Pn, _t: { allInFx, burst, phoneRender, hostRender, flyChips, settlePlan, tableSummary, toast } };
+window.__hgc = { get S(){ return S; }, get phone(){ return Pn.st; }, H, Pn, _t: { allInFx, burst, phoneRender, hostRender, flyChips, settlePlan, tableSummary, playerStats, toast } };
 })();
 </script>
 </body>
